@@ -1,5 +1,36 @@
-import os
+from dataclasses import dataclass
+from enum import Enum, auto
+import numpy as np
 
-# Take a file's `__file__` and return the path to the "config.json" in the same directory
-def get_config_path(file):
-    return os.path.join(os.path.dirname(os.path.realpath(file)), "config.json")
+@dataclass
+class GpsInfo:
+    time: float
+    latitude: float
+    longitude: float
+    altitude: float
+    homepoint_height: float
+    fix: int
+    number_of_visible_satellies: int
+
+@dataclass
+class GimbalInfo:
+    pitch: float
+    yaw: float
+    mode: str
+
+class Transition(Enum):
+    UNKNOWN = auto()
+    LOW_TO_HIGH = auto()
+    HIGH_TO_LOW = auto()
+
+class PL_State(Enum):
+    HIGH = auto()
+    LOW = auto()
+    UNKNOWN = auto()
+
+@dataclass
+class Image:
+    name: str
+    time: float
+    pl_state: PL_State
+    data: np.ndarray

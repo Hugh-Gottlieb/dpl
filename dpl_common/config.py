@@ -1,4 +1,9 @@
 import json
+import os
+
+# Take a file's `__file__` and return the abs path to the "config.json" in the same directory
+def get_config_path(file: str) -> str:
+    return os.path.join(os.path.dirname(os.path.realpath(file)), "config.json")
 
 class Config:
 
@@ -17,8 +22,11 @@ class Config:
         with open(path, "w") as f:
             json.dump(self.config, f, indent=4)
 
-    def hash(self) -> int:
-        return hash(json.dumps(self.config, sort_keys=True))
+    def same_hash(self, other_config: dict) -> int:
+        return self.__hash_config_dict(other_config) == self.__hash_config_dict(self.config)
+
+    def __hash_config_dict(self, config: dict):
+        return hash(json.dumps(config, sort_keys=True))
 
     def get_config(self) -> dict:
         return self.config
