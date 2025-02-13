@@ -2,15 +2,18 @@ from dataclasses import dataclass
 from enum import Enum, auto
 import numpy as np
 
+analysed_folder_name = "analysed"
+
 @dataclass
 class GpsInfo:
-    time: float
+    date: str
+    time: str
     latitude: float
     longitude: float
     altitude: float
     homepoint_height: float
     fix: int
-    number_of_visible_satellies: int
+    number_of_satellites_visible: int
 
 @dataclass
 class GimbalInfo:
@@ -18,19 +21,33 @@ class GimbalInfo:
     yaw: float
     mode: str
 
-class Transition(Enum):
-    UNKNOWN = auto()
-    LOW_TO_HIGH = auto()
-    HIGH_TO_LOW = auto()
+@dataclass
+class CameraInfo:
+    exposure_time: int
+    fps: int
 
-class PL_State(Enum):
-    HIGH = auto()
-    LOW = auto()
-    UNKNOWN = auto()
+@dataclass
+class Transition:
+    class Direction(Enum):
+        UNKNOWN = auto()
+        LOW_TO_HIGH = auto()
+        HIGH_TO_LOW = auto()
+    @staticmethod
+    def string_to_transition_direction(value: str) -> Direction:
+        return Transition.Direction[value.upper().replace("-", "_")]
+    direction: Direction
+    time: float # seconds since epoch (same as time.time())
 
 @dataclass
 class Image:
+    class PL_State(Enum):
+        HIGH = auto()
+        LOW = auto()
+        UNKNOWN = auto()
+    @staticmethod
+    def string_to_pl_state(value: str) -> PL_State:
+        return Image.PL_State[value.upper()]
     name: str
-    time: float
+    time: float # seconds since epoch (same as time.time())
     pl_state: PL_State
     data: np.ndarray
