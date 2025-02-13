@@ -1,0 +1,9 @@
+{
+    "transition_time_ms": 50,
+    "min_plateau_time_ms": 100,
+    "min_plateau_imgs": 5,
+    "max_plateau_time_ms": 500,
+    "max_plateau_imgs": 20,
+    "switched_area": 0.1,
+    "lens": ""
+}
