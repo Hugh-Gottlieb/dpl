@@ -20,10 +20,11 @@ class Registration:
         return [self.register_img(img, target) for img in imgs]
 
     def register_img(self, img: np.ndarray, target: np.ndarray) -> np.ndarray:
-        img_norm = cv2.normalize(img, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX).astype("uint8")
-        target_norm = cv2.normalize(target, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX).astype("uint8")
-        keypoints1, descriptors1 = self.feature_detector.detectAndCompute(img_norm, None)
-        keypoints2, descriptors2 = self.feature_detector.detectAndCompute(target_norm, None)
+        norm_min, norm_max = np.percentile(target, 2.5), np.percentile(target, 97.5)
+        img_norm = (255 * (img.astype("float") - norm_min) / (norm_max - norm_min)).astype("uint8")
+        target_norm = (255 * (target.astype("float") - norm_min) / (norm_max - norm_min)).astype("uint8")
+        keypoints1, descriptors1 = self.feature_detector.detectAndCompute(target_norm, None)
+        keypoints2, descriptors2 = self.feature_detector.detectAndCompute(img_norm, None)
         matches = list(self.matcher.match(descriptors1, descriptors2, None))
         matches.sort(key=lambda x: x.distance, reverse=False)
         # NOTE - could sort through matches and remove low scoring, and /or those that move too much

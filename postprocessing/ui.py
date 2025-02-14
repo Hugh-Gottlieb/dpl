@@ -109,7 +109,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.state_detector.tag_states(images, transitions, self.config)
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
             relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
-            self.lens_correction.correct_images(relevant_imgs, self.lens_correction.get_lens_names()[0]) # TODO - get name from config, which is a drop-down in the UI
+            self.lens_correction.correct_images(relevant_imgs, "Kowa_f25_SenS_inGaAs") # TODO - get name from config, which is a drop-down in the UI
             self.registration.register_images(relevant_imgs, transition_img)
             acq.get_pl_image().create(relevant_imgs, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
             acq.get_pl_image().save(self.mission.get_analysed_folder())
