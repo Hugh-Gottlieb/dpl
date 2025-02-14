@@ -1,8 +1,18 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 import numpy as np
+from cv2 import applyColorMap, COLORMAP_INFERNO
 
 analysed_folder_name = "analysed"
+
+def tif_to_jpeg(img: np.ndarray, clip_percentile: float = 2.5, coloured: bool = True) -> np.ndarray :
+    img = img.astype(np.float32)
+    preview = img - np.percentile(img, clip_percentile)
+    preview = (preview / np.percentile(preview, 100 - clip_percentile))
+    preview = (np.clip(preview, 0, 1) * (2**8 - 1)).astype(np.uint8)
+    if coloured:
+        return applyColorMap(preview, COLORMAP_INFERNO)
+    return preview
 
 @dataclass
 class GpsInfo:
