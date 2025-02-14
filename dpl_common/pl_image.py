@@ -29,8 +29,8 @@ class PL_Image:
         self.gimbal = gimbal
         self.camera = camera
 
-    def __get_avg_img(imgs: list[Image], state: Image.PL_State) -> np.ndarray:
-        relevant_imgs = [img for img in imgs if img.pl_state == state]
+    def __get_avg_img(self, imgs: list[Image], state: Image.PL_State) -> np.ndarray:
+        relevant_imgs = [img.data for img in imgs if img.pl_state == state]
         assert (len(relevant_imgs) >= 1), f"PL image has no imgs of state {state.name}"
         return np.average(relevant_imgs, axis=0)
 

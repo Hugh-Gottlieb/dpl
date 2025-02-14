@@ -10,11 +10,11 @@ class Registration:
         self.matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_L1)
 
     def register_image(self, image: Image, target: Image):
-        image.data = self.register_image(image.data, target.data)
+        image.data = self.register_img(image.data, target.data)
 
     def register_images(self, images: list[Image], target: Image):
         for image in images:
-            image.data = self.register_image(image.data, target.data)
+            image.data = self.register_img(image.data, target.data)
 
     def register_imgs(self, imgs: list[np.ndarray], target: np.ndarray) -> list[np.ndarray]:
         return [self.register_img(img, target) for img in imgs]
