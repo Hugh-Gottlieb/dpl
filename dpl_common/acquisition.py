@@ -39,7 +39,7 @@ class Acquisition:
         for transition in metadata["transitions"]:
             self.transitions.append(Transition(
                 direction=Transition.string_to_transition_direction(transition["direction"]),
-                time=(img["time"] * 1e-3)
+                time=(transition["time"] * 1e-3)
             ))
 
     def get_name(self):

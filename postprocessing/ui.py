@@ -83,6 +83,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             acq_status = self.acq_status[acq.get_name()]
             if acq_status.status == self.AcquisitionStatus.Status.NO:
                 acq_status.status = self.AcquisitionStatus.Status.QUEUED
+                self.__update_table_status(acq.get_name())
         self.log.appendPlainText(f"Processing mission {self.mission.get_folder()}")
         # TODO kick up background thread pool and handle there
         # TODO kick up background thread to update status / error msgs in UI?
@@ -97,6 +98,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __process_acq(self, acq: Acquisition):
         self.acq_status[acq.get_name()].status = self.AcquisitionStatus.Status.IN_PROGRESS
+        self.__update_table_status(acq.get_name())
         start_time = time.time()
         try:
             images = acq.get_imgs(load_data=True)
