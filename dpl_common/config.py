@@ -10,16 +10,17 @@ class Config:
     def __init__(self, path: str):
         self.read(path)
 
+    # NOTE - Qt can get in the way of this getting called correctly
     def __del__(self):
-        self.write(self.path)
+        self.write()
 
     def read(self, path: str):
         self.path = path
         with open(path) as f:
             self.config = json.load(f)
 
-    def write(self, path: str):
-        with open(path, "w") as f:
+    def write(self):
+        with open(self.path, "w") as f:
             json.dump(self.config, f, indent=4)
 
     def same_hash(self, other_config: dict) -> int:
