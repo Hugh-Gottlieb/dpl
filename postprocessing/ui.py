@@ -1,5 +1,6 @@
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidgetItem, QPushButton, QComboBox
+from PySide6.QtCore import QTimer
 import sys
 from enum import Enum, auto
 import os
@@ -7,6 +8,8 @@ from dataclasses import dataclass
 import time
 import traceback
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 from dpl_common.helpers import Image
 from dpl_common.config import Config, get_config_path
@@ -45,11 +48,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.state_detector = StateDetector(self.config)
         self.mission = None
         self.acq_status = {}
+        self.processing_status = {}
         self.running_processing = False
+        self.abort_processing = False
+        self.pending_msgs = []
+        self.pending_msgs_lock = Lock()
+        self.update_status_thread = QTimer(self)
+        self.update_status_thread.timeout.connect(self.__update_status_thread)
+        self.thread_pool = None
         # Setup UI
         self.acquisition_table.setColumnWidth(0, 10) # Set first column (displaying colour) to be very small
         self.__setup_status_text_and_colour()
         self.__setup_lens_options()
+        self.__enable_buttons()
+
+    def closeEvent(self, event):
+        if self.running_processing:
+            self.stop_processing()
+        super(QMainWindow, self).closeEvent(event)
 
     def set_mission(self):
         if self.running_processing:
@@ -66,22 +82,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             row = self.acquisition_table.rowCount()
             self.acquisition_table.insertRow(row)
             self.acquisition_table.setItem(row, 2, QTableWidgetItem(acq.get_name()))
-            self.acq_status[acq.get_name()] = self.AcquisitionStatus(row, None) # Init status to None, actually gets set in the line below
-            self.__update_acquisition_status(acq)
+            self.acq_status[acq] = self.AcquisitionStatus(row, None) # Init status to None, actually gets set in the line below
+            self.__update_acquisition_status(acq, recheck=True)
         self.resize(self.sizeHint())
         self.log.appendPlainText(f"Loaded mission {self.mission.get_folder()}")
-
-    # If acq_status is None, read from PL_image, else use the one provided
-    def __update_acquisition_status(self, acq: Acquisition, status: AcquisitionStatus.Status=None):
-        if status is None:
-            status = self.AcquisitionStatus.Status[acq.get_pl_image().get_status(self.config).name] # Match names of PL_Image.Status amd AcquisitionStatus.Status
-        acq_status = self.acq_status[acq.get_name()]
-        acq_status.status = status
-        status_item = QTableWidgetItem()
-        status_item.setBackground(self.status_colours[acq_status.status])
-        self.acquisition_table.setItem(acq_status.row, 0, status_item)
-        self.acquisition_table.setItem(acq_status.row, 1, QTableWidgetItem(self.status_text[acq_status.status]))
-        QApplication.processEvents() # NOTE - only needed to repaint if processing in main thread
 
     def process_mission(self):
         if self.mission is None:
@@ -94,29 +98,40 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.log.appendPlainText("Error: unknown lens selected")
             return
         self.running_processing = True
-        for obj in self.central_widget.findChildren(QPushButton) + self.central_widget.findChildren(QComboBox):
-            obj.setEnabled(False)
-        # Update status
-        for acq in self.mission.get_acquisitions():
-            acq_status = self.acq_status[acq.get_name()]
-            if acq_status.status == self.AcquisitionStatus.Status.NO:
-                self.__update_acquisition_status(acq, self.AcquisitionStatus.Status.QUEUED)
-        self.log.appendPlainText(f"Processing mission {self.mission.get_folder()}")
-        # TODO - kick up background thread pool and handle there.
-        #      - kick up background thread at 10Hz to update status, locked list of error msgs
-        #      - stop button?
-        # Start processing
+        self.__enable_buttons()
+        self.thread_pool = ThreadPoolExecutor(max_workers=max(1, os.cpu_count() - 2))
         if not os.path.exists(self.mission.get_analysed_folder()):
             os.mkdir(self.mission.get_analysed_folder())
         for acq in self.mission.get_acquisitions():
-            if self.acq_status[acq.get_name()].status == self.AcquisitionStatus.Status.QUEUED:
-                self.__process_acq(acq)
-        self.running_processing = False
-        for obj in self.central_widget.findChildren(QPushButton) + self.central_widget.findChildren(QComboBox):
-            obj.setEnabled(True)
+            if self.acq_status[acq].status == self.AcquisitionStatus.Status.NO:
+                self.acq_status[acq].status = self.AcquisitionStatus.Status.QUEUED
+                self.processing_status[acq] = None
+                self.thread_pool.submit(self.__process_acq, acq)
+        self.update_status_thread.start((1/10)*1e3) # 10Hz
+        self.log.appendPlainText(f"Processing mission {self.mission.get_folder()} ({self.thread_pool._max_workers} threads)")
+
+    def __update_status_thread(self):
+        self.__write_pending_msgs()
+        finished_acqs = []
+        for acq, percent in self.processing_status.items():
+            if self.acq_status[acq].status not in [self.AcquisitionStatus.Status.IN_PROGRESS, self.AcquisitionStatus.Status.QUEUED]:
+                finished_acqs.append(acq)
+                percent = None
+            self.__update_acquisition_status(acq, recheck=False, post_text=percent)
+        for acq in finished_acqs:
+            self.processing_status.pop(acq)
+        if not self.processing_status: # Dict now empty, all removed
+            self.__conclude_processing()
+            self.log.appendPlainText(f"Finished mission {self.mission.get_folder()}")
+
+    def __write_pending_msgs(self):
+        with self.pending_msgs_lock:
+            for msg in self.pending_msgs:
+                self.log.appendPlainText(msg)
+            self.pending_msgs = []
 
     def __process_acq(self, acq: Acquisition):
-        self.__update_acquisition_status(acq, self.AcquisitionStatus.Status.IN_PROGRESS)
+        self.acq_status[acq].status = self.AcquisitionStatus.Status.IN_PROGRESS
         start_time = time.time()
         try:
             images = acq.get_imgs(load_data=True)
@@ -129,15 +144,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
             self.lens_correction.correct_images(relevant_imgs, self.lens_selection.currentText())
             self.lens_correction.correct_image(transition_img, self.lens_selection.currentText())
-            self.registration.register_images(relevant_imgs, transition_img)
+            n_imgs = len(relevant_imgs)
+            for i, img in enumerate(relevant_imgs):
+                if self.abort_processing:
+                    acq.clear_imgs() # Remove partially processed images so reloaded from file without lens correction etc.
+                    return
+                self.processing_status[acq] = f"{i} / {n_imgs}"
+                self.registration.register_image(img, transition_img)
             acq.get_pl_image().create(relevant_imgs, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
             acq.get_pl_image().save(self.mission.get_analysed_folder())
-            self.__update_acquisition_status(acq, self.AcquisitionStatus.Status.YES)
-            self.log.appendPlainText(f"Success: {acq.get_name()} ({round(time.time() - start_time, 3)}s) ({len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.HIGH])} HIGH, {len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.LOW])} LOW)")
+            self.acq_status[acq].status = self.AcquisitionStatus.Status.YES
+            with self.pending_msgs_lock:
+                self.pending_msgs.append(f"  Success: {acq.get_name()} ({round(time.time() - start_time, 3)}s) ({len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.HIGH])} HIGH, {len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.LOW])} LOW)")
         except Exception as e:
             print(traceback.format_exc())
-            self.__update_acquisition_status(acq, self.AcquisitionStatus.Status.ERROR)
-            self.log.appendPlainText(f"Error: {acq.get_name()} - {e} ({round(time.time() - start_time, 3)}s)")
+            self.acq_status[acq].status = self.AcquisitionStatus.Status.ERROR
+            with self.pending_msgs_lock:
+                self.pending_msgs.append(f"  Error: {acq.get_name()} - {e} ({round(time.time() - start_time, 3)}s)")
 
     def clear_mission(self):
         if self.mission is None:
@@ -147,9 +170,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.log.appendPlainText("Error: processing running")
             return
         for acq in self.mission.get_acquisitions():
+            acq.clear_imgs()
             acq.get_pl_image().clear(self.mission.get_analysed_folder())
-            self.__update_acquisition_status(acq)
+            self.__update_acquisition_status(acq, recheck=True)
         self.log.appendPlainText(f"Cleared mission {self.mission.get_folder()}")
+
+    def stop_processing(self):
+        if not self.running_processing:
+            self.log.appendPlainText("Error: can't stop processing, nothing running")
+            return
+        self.abort_processing = True
+        self.thread_pool.shutdown(wait=True, cancel_futures=True)
+        self.abort_processing = False
+        self.__conclude_processing()
+        for acq in self.mission.get_acquisitions():
+            self.__update_acquisition_status(acq, recheck=True)
+        self.log.appendPlainText(f"Aborted mission {self.mission.get_folder()}")
+
+    def __conclude_processing(self):
+        self.running_processing = False
+        self.update_status_thread.stop()
+        self.__enable_buttons()
+        self.__write_pending_msgs() # Write any last messages that got written while shutting down
+
+    def __enable_buttons(self):
+        for obj in self.central_widget.findChildren(QPushButton) + self.central_widget.findChildren(QComboBox):
+            obj.setEnabled(not self.running_processing)
+        self.stop_button.setEnabled(self.running_processing)
 
     def __setup_status_text_and_colour(self):
         self.status_colours = {
@@ -169,13 +216,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.AcquisitionStatus.Status.IN_PROGRESS: "In Progress",
         }
 
-    def __setup_lens_options(self):
-        self.lens_selection.blockSignals(True)
-        self.lens_selection.clear()
-        self.lens_selection.addItems(self.lens_correction.get_lens_names())
-        if self.config.get("lens") in self.lens_correction.get_lens_names():
-            self.lens_selection.setCurrentText(self.config.get("lens"))
-        self.lens_selection.blockSignals(False)
+    def __update_acquisition_status(self, acq: Acquisition, recheck: bool, post_text: str=None):
+        acq_status = self.acq_status[acq]
+        if recheck:
+            acq_status.status = self.AcquisitionStatus.Status[acq.get_pl_image().get_status(self.config).name] # Match names of PL_Image.Status amd AcquisitionStatus.Status
+        post_text = " " + post_text if post_text is not None else ""
+        status_item = QTableWidgetItem()
+        status_item.setBackground(self.status_colours[acq_status.status])
+        self.acquisition_table.setItem(acq_status.row, 0, status_item)
+        self.acquisition_table.setItem(acq_status.row, 1, QTableWidgetItem(self.status_text[acq_status.status] + post_text))
 
     def update_lens(self):
         if self.lens_selection.currentText() not in self.lens_correction.get_lens_names():
@@ -188,8 +237,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.config.write()
         if self.mission is not None:
             for acq in self.mission.get_acquisitions():
-                self.__update_acquisition_status(acq)
+                self.__update_acquisition_status(acq, recheck=True)
 
+    def __setup_lens_options(self):
+        self.lens_selection.blockSignals(True)
+        self.lens_selection.clear()
+        self.lens_selection.addItems(self.lens_correction.get_lens_names())
+        if self.config.get("lens") in self.lens_correction.get_lens_names():
+            self.lens_selection.setCurrentText(self.config.get("lens"))
+        self.lens_selection.blockSignals(False)
 
 
 if __name__ == "__main__":

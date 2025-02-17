@@ -64,5 +64,9 @@ class Acquisition:
                     img.data = cv2.imread(path, cv2.IMREAD_ANYDEPTH)
         return self.imgs
 
+    def clear_imgs(self):
+        for img in self.imgs:
+            img.data = None
+
     def get_transitions(self):
         return self.transitions

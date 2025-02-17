@@ -69,7 +69,7 @@ class Ui_MainWindow(object):
         self.acquisition_table.horizontalHeader().setVisible(True)
         self.acquisition_table.horizontalHeader().setCascadingSectionResizes(False)
         self.acquisition_table.horizontalHeader().setMinimumSectionSize(10)
-        self.acquisition_table.horizontalHeader().setDefaultSectionSize(100)
+        self.acquisition_table.horizontalHeader().setDefaultSectionSize(150)
         self.acquisition_table.horizontalHeader().setHighlightSections(False)
         self.acquisition_table.horizontalHeader().setProperty("showSortIndicator", True)
         self.acquisition_table.horizontalHeader().setStretchLastSection(True)
@@ -105,6 +105,11 @@ class Ui_MainWindow(object):
 
         self.grid_layout.addWidget(self.lens_selection, 1, 1, 1, 2)
 
+        self.stop_button = QPushButton(self.central_widget)
+        self.stop_button.setObjectName(u"stop_button")
+
+        self.grid_layout.addWidget(self.stop_button, 2, 1, 1, 1)
+
 
         self.gridLayout_2.addLayout(self.grid_layout, 0, 0, 1, 1)
 
@@ -115,6 +120,7 @@ class Ui_MainWindow(object):
         self.process_button.clicked.connect(MainWindow.process_mission)
         self.clear_button.clicked.connect(MainWindow.clear_mission)
         self.lens_selection.currentTextChanged.connect(MainWindow.update_lens)
+        self.stop_button.clicked.connect(MainWindow.stop_processing)
 
         QMetaObject.connectSlotsByName(MainWindow)
     # setupUi
@@ -130,5 +136,6 @@ class Ui_MainWindow(object):
         ___qtablewidgetitem1.setText(QCoreApplication.translate("MainWindow", u"Name", None));
         self.author_text.setText(QCoreApplication.translate("MainWindow", u"Developed by Hugh Gottlieb, with support from Gerold Kloos", None))
         self.lens_label.setText(QCoreApplication.translate("MainWindow", u"Lens", None))
+        self.stop_button.setText(QCoreApplication.translate("MainWindow", u"Stop", None))
     # retranslateUi
 

@@ -72,7 +72,7 @@
          <number>10</number>
         </attribute>
         <attribute name="horizontalHeaderDefaultSectionSize">
-         <number>100</number>
+         <number>150</number>
         </attribute>
         <attribute name="horizontalHeaderHighlightSections">
          <bool>false</bool>
@@ -139,6 +139,13 @@
       <item row="1" column="1" colspan="2">
        <widget class="QComboBox" name="lens_selection"/>
       </item>
+      <item row="2" column="1">
+       <widget class="QPushButton" name="stop_button">
+        <property name="text">
+         <string>Stop</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </item>
    </layout>
@@ -185,7 +192,7 @@
    <slot>clear_mission()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>331</x>
+     <x>509</x>
      <y>91</y>
     </hint>
     <hint type="destinationlabel">
@@ -210,11 +217,28 @@
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>stop_button</sender>
+   <signal>clicked()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>stop_processing()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>307</x>
+     <y>78</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>515</x>
+     <y>156</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
  <slots>
   <slot>set_mission()</slot>
   <slot>process_mission()</slot>
   <slot>clear_mission()</slot>
   <slot>update_lens()</slot>
+  <slot>stop_processing()</slot>
  </slots>
 </ui>
