@@ -42,7 +42,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lens_correction = LensCorrection()
         self.registration = Registration()
         self.transition_detector = TransitionDetector()
-        self.state_detector = StateDetector()
+        self.state_detector = StateDetector(self.config)
         self.mission = None
         self.acq_status = {}
         self.running_processing = False
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if len(transitions) == 0:
                 transitions = self.transition_detector.detect_transitions(images)
             assert (len(transitions) == 1), "Multiple transitions cannot be handled yet"
-            self.state_detector.tag_states(images, transitions, self.config)
+            self.state_detector.tag_states(images, transitions)
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
             relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
             self.lens_correction.correct_images(relevant_imgs, self.lens_selection.currentText())
@@ -133,7 +133,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             acq.get_pl_image().create(relevant_imgs, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
             acq.get_pl_image().save(self.mission.get_analysed_folder())
             self.__update_acquisition_status(acq, self.AcquisitionStatus.Status.YES)
-            self.log.appendPlainText(f"Success: {acq.get_name()} ({round(time.time() - start_time, 3)}s)")
+            self.log.appendPlainText(f"Success: {acq.get_name()} ({round(time.time() - start_time, 3)}s) ({len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.HIGH])} HIGH, {len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.LOW])} LOW)")
         except Exception as e:
             print(traceback.format_exc())
             self.__update_acquisition_status(acq, self.AcquisitionStatus.Status.ERROR)

@@ -30,6 +30,10 @@ class PL_Image:
         self.gps = gps
         self.gimbal = gimbal
         self.camera = camera
+        self.process_info = {
+            "high_imgs": len([1 for img in imgs if img.pl_state == Image.PL_State.HIGH]),
+            "low_imgs": len([1 for img in imgs if img.pl_state == Image.PL_State.LOW]),
+        }
 
     def __get_avg_img(self, imgs: list[Image], state: Image.PL_State) -> np.ndarray:
         relevant_imgs = [img.data for img in imgs if img.pl_state == state]
@@ -43,6 +47,7 @@ class PL_Image:
         with open(metadata_path) as f:
             metadata = json.load(f)
         self.process_config = metadata["process_config"]
+        self.process_info = metadata["process_info"]
         self.process_time = metadata["process_time"]
         self.acq_time = metadata["acq_time"]
         self.gps = GpsInfo(**metadata["gps"])
@@ -60,6 +65,7 @@ class PL_Image:
         pil_image.save(os.path.join(folder, self.name + ".tif"))
         metadata = {
             "process_config": self.process_config,
+            "process_info": self.process_info,
             "process_time": self.process_time,
             "acq_time": self.acq_time,
             "gps": asdict(self.gps),
