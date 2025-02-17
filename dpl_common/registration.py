@@ -19,10 +19,13 @@ class Registration:
     def register_imgs(self, imgs: list[np.ndarray], target: np.ndarray) -> list[np.ndarray]:
         return [self.register_img(img, target) for img in imgs]
 
+    # NOTE: currently recalculate the target keypoints / descriptors for every image, could speed up by reusing
+    # NOTE: input is typically a uint16, but return a float64 which nan's at the border
     def register_img(self, img: np.ndarray, target: np.ndarray) -> np.ndarray:
-        norm_min, norm_max = np.percentile(target, 2.5), np.percentile(target, 97.5)
-        img_norm = (255 * (img.astype("float") - norm_min) / (norm_max - norm_min)).astype("uint8")
-        target_norm = (255 * (target.astype("float") - norm_min) / (norm_max - norm_min)).astype("uint8")
+        baseline = np.min(target)
+        ratio = (np.max(target) - baseline) / 255
+        target_norm = ((target - baseline) / ratio).astype(np.uint8)
+        img_norm = np.clip(((img - baseline) / ratio), 0, 255).astype(np.uint8)
         keypoints1, descriptors1 = self.feature_detector.detectAndCompute(target_norm, None)
         keypoints2, descriptors2 = self.feature_detector.detectAndCompute(img_norm, None)
         matches = list(self.matcher.match(descriptors1, descriptors2, None))
@@ -36,4 +39,4 @@ class Registration:
             points2[i, :] = keypoints2[match.trainIdx].pt
         homography, _ = cv2.findHomography(points2, points1, cv2.RANSAC)
         height, width = img.shape
-        return cv2.warpPerspective(img, homography, (width, height), borderValue=0)
+        return cv2.warpPerspective(img.astype(float), homography, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=np.nan)

@@ -22,6 +22,8 @@ class PL_Image:
 
     def create(self, imgs: list[Image], config: Config, gps: GpsInfo, gimbal: GimbalInfo, camera: CameraInfo):
         self.data = self.__get_avg_img(imgs, Image.PL_State.HIGH) - self.__get_avg_img(imgs, Image.PL_State.LOW)
+        nan_mask = np.any([np.isnan(img.data) for img in imgs if img.pl_state in [Image.PL_State.HIGH, Image.PL_State.LOW]], axis=0)
+        self.data[np.logical_or(nan_mask, self.data < 0)] = 0
         self.process_config = config.get_config()
         self.process_time = time.time()
         self.acq_time = imgs[0].time # Safe as __get_avg_imgs will fail if there are no imgs

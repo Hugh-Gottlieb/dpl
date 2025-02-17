@@ -128,6 +128,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
             relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
             self.lens_correction.correct_images(relevant_imgs, self.lens_selection.currentText())
+            self.lens_correction.correct_image(transition_img, self.lens_selection.currentText())
             self.registration.register_images(relevant_imgs, transition_img)
             acq.get_pl_image().create(relevant_imgs, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
             acq.get_pl_image().save(self.mission.get_analysed_folder())

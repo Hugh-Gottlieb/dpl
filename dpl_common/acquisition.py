@@ -1,7 +1,6 @@
 import os
 import json
-from PIL import Image as PIL_Image
-import numpy as np
+import cv2
 
 from dpl_common.pl_image import PL_Image
 from dpl_common.helpers import analysed_folder_name, CameraInfo, GimbalInfo, GpsInfo, Image, Transition
@@ -62,7 +61,7 @@ class Acquisition:
             for img in self.imgs:
                 if img.data is None:
                     path = os.path.join(self.root_dir, self.name, "tif", img.name + ".tif")
-                    img.data = np.array(PIL_Image.open(path), dtype=float)
+                    img.data = cv2.imread(path, cv2.IMREAD_ANYDEPTH)
         return self.imgs
 
     def get_transitions(self):
