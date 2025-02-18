@@ -50,8 +50,8 @@ class PL_Image:
         self.process_info = metadata["process_info"]
         self.process_time = metadata["process_time"]
         self.acq_time = metadata["acq_time"]
-        self.gps = GpsInfo(**metadata["gps"])
-        self.gimbal = GimbalInfo(**metadata["gimbal"])
+        self.gps = GpsInfo(**metadata["gps"]) if "gps" in metadata else None
+        self.gimbal = GimbalInfo(**metadata["gimbal"]) if "gimbal" in metadata else None
         self.camera = CameraInfo(**metadata["camera"])
 
     def __get_paths(self, processed_folder: str) -> tuple[str, str]:
@@ -68,10 +68,11 @@ class PL_Image:
             "process_info": self.process_info,
             "process_time": self.process_time,
             "acq_time": self.acq_time,
-            "gps": asdict(self.gps),
-            "gimbal": asdict(self.gimbal),
             "camera": asdict(self.camera),
         }
+        for name, obj in [("gps", self.gps), ("gimbal", self.gimbal)]:
+            if obj is not None:
+                metadata[name] = asdict(obj)
         with open(os.path.join(folder, self.name + ".json"), "w") as f:
             json.dump(metadata, f, indent=4)
 

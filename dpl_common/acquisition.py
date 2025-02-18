@@ -23,8 +23,8 @@ class Acquisition:
         assert (os.path.exists(metadata_path)), f"Metadata file missing: {metadata_path}"
         with open(metadata_path) as f:
             metadata = json.load(f)
-        self.gps = GpsInfo(**metadata["gps"])
-        self.gimbal = GimbalInfo(**metadata["gimbal"])
+        self.gps = GpsInfo(**metadata["gps"]) if "gps" in metadata else None
+        self.gimbal = GimbalInfo(**metadata["gimbal"]) if "gimbal" in metadata else None
         self.camera = CameraInfo(**metadata["camera"])
         self.imgs = []
         for img in metadata["images"]:
