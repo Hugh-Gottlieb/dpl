@@ -47,7 +47,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         space = 10
         y_size, x_size, = self.mission.get_acquisitions()[0].get_pl_image().data.shape
         rows, cols = self.rows.value(), self.cols.value()
-        overview_img = np.zeros((space + rows * (y_size + space), space + cols * (x_size + space)), dtype=np.uint16)
+        overview_img = np.zeros((space + rows * (y_size + space), space + cols * (x_size + space)), dtype=np.float32)
+        overview_img[:,:] = np.nan
         for i, acq in enumerate(self.mission.get_acquisitions()):
             img = acq.get_pl_image().data
             row, col = self.__get_row_col(i, rows, cols)
@@ -56,11 +57,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             cell_x2 = cell_x1 + x_size
             cell_y2 = cell_y1 + y_size
             overview_img[cell_y1:cell_y2, cell_x1:cell_x2] = img[:,:]
+        nan_mask = np.isnan(overview_img)
+        overview_img[nan_mask] = 0
         overview_img = tif_to_jpeg(overview_img)
+        overview_img[nan_mask] = [255, 255, 255]
         for i in range(len(self.mission.get_acquisitions())):
             row, col = self.__get_row_col(i, rows, cols)
             cell_x1 = space + col * (x_size + space)
-            cell_y1 = space + row * (y_size + space) + y_size
+            cell_y1 = space + row * (y_size + space) + y_size - 2 * space
             overview_img = cv2.putText(overview_img, str(i), (cell_x1, cell_y1), cv2.FONT_HERSHEY_SIMPLEX, 5, (50,205,50), 5, cv2.LINE_AA)
         return overview_img
 
