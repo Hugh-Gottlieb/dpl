@@ -110,6 +110,7 @@ class Ui_MainWindow(object):
 
         self.grid_layout.addWidget(self.stop_button, 2, 1, 1, 1)
 
+        self.grid_layout.setRowStretch(3, 10)
 
         self.gridLayout_2.addLayout(self.grid_layout, 0, 0, 1, 1)
 

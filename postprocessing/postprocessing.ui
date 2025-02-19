@@ -16,7 +16,7 @@
   <widget class="QWidget" name="central_widget">
    <layout class="QGridLayout" name="gridLayout_2">
     <item row="0" column="0">
-     <layout class="QGridLayout" name="grid_layout">
+     <layout class="QGridLayout" name="grid_layout" rowstretch="0,0,0,10,0,0">
       <property name="verticalSpacing">
        <number>6</number>
       </property>
