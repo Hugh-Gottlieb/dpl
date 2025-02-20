@@ -161,6 +161,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.acq_status[acq].status = self.AcquisitionStatus.Status.ERROR
             with self.pending_msgs_lock:
                 self.pending_msgs.append(f"  Error: {acq.get_name()} - {e} ({round(time.time() - start_time, 3)}s)")
+        acq.clear_imgs() # Free up memory
 
     def clear_mission(self):
         if self.mission is None:
