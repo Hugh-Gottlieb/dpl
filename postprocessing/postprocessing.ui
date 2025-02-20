@@ -28,7 +28,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Clear</string>
+         <string>Delete Analysed Imgs</string>
         </property>
        </widget>
       </item>

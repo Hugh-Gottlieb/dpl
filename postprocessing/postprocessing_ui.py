@@ -142,7 +142,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"DPL Post-processing", None))
-        self.clear_button.setText(QCoreApplication.translate("MainWindow", u"Clear", None))
+        self.clear_button.setText(QCoreApplication.translate("MainWindow", u"Delete Analysed Imgs", None))
         self.process_button.setText(QCoreApplication.translate("MainWindow", u"Process", None))
         self.select_button.setText(QCoreApplication.translate("MainWindow", u"Set Mission", None))
         ___qtablewidgetitem = self.acquisition_table.horizontalHeaderItem(1)

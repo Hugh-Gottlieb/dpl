@@ -99,7 +99,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return
         self.running_processing = True
         self.__enable_buttons()
-        self.thread_pool = ThreadPoolExecutor(max_workers=max(1, os.cpu_count() - 2))
+        self.thread_pool = ThreadPoolExecutor(max_workers=max(1, os.cpu_count()/2))
         if not os.path.exists(self.mission.get_analysed_folder()):
             os.mkdir(self.mission.get_analysed_folder())
         for acq in self.mission.get_acquisitions():
