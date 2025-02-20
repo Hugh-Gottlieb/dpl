@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>520</width>
-    <height>278</height>
+    <width>620</width>
+    <height>346</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -22,6 +22,11 @@
       </property>
       <item row="2" column="2">
        <widget class="QPushButton" name="clear_button">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Clear</string>
         </property>
@@ -29,6 +34,11 @@
       </item>
       <item row="2" column="0">
        <widget class="QPushButton" name="process_button">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Process</string>
         </property>
@@ -36,6 +46,11 @@
       </item>
       <item row="0" column="0">
        <widget class="QPushButton" name="select_button">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Set Mission</string>
         </property>
@@ -45,9 +60,14 @@
        <widget class="QPlainTextEdit" name="log">
         <property name="minimumSize">
          <size>
-          <width>500</width>
+          <width>600</width>
           <height>0</height>
          </size>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
         </property>
         <property name="readOnly">
          <bool>true</bool>
@@ -56,10 +76,21 @@
       </item>
       <item row="3" column="0" colspan="3">
        <widget class="QTableWidget" name="acquisition_table">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="sizeAdjustPolicy">
          <enum>QAbstractScrollArea::AdjustIgnored</enum>
         </property>
         <property name="alternatingRowColors">
+         <bool>false</bool>
+        </property>
+        <property name="showGrid">
+         <bool>true</bool>
+        </property>
+        <property name="sortingEnabled">
          <bool>false</bool>
         </property>
         <attribute name="horizontalHeaderVisible">
@@ -78,7 +109,7 @@
          <bool>false</bool>
         </attribute>
         <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
-         <bool>true</bool>
+         <bool>false</bool>
         </attribute>
         <attribute name="horizontalHeaderStretchLastSection">
          <bool>true</bool>
@@ -114,6 +145,11 @@
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Developed by Hugh Gottlieb, with support from Gerold Kloos</string>
         </property>
@@ -121,6 +157,11 @@
       </item>
       <item row="0" column="1" colspan="2">
        <widget class="QLineEdit" name="mission_path">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="readOnly">
          <bool>true</bool>
         </property>
@@ -128,6 +169,11 @@
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="lens_label">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Lens</string>
         </property>
@@ -137,10 +183,21 @@
        </widget>
       </item>
       <item row="1" column="1" colspan="2">
-       <widget class="QComboBox" name="lens_selection"/>
+       <widget class="QComboBox" name="lens_selection">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
+       </widget>
       </item>
       <item row="2" column="1">
        <widget class="QPushButton" name="stop_button">
+        <property name="font">
+         <font>
+          <pointsize>12</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Stop</string>
         </property>

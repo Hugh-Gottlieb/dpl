@@ -40,6 +40,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if n_actual != n_expected:
             self.status.setText(f"Error: Mission has {n_actual} images, but layout requires {n_expected}")
             return
+        self.showMaximized() # Fullscreen
+        QApplication.processEvents() # Force that update, so image displayed at correct resolution
         overview = self.__build_overview()
         self.__display_img(overview)
         self.status.setText(f"Showing overview")
@@ -58,8 +60,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             cell_x2 = cell_x1 + x_size
             cell_y2 = cell_y1 + y_size
             overview_img[cell_y1:cell_y2, cell_x1:cell_x2] = img[:,:]
-        self.zoom_limit_min = np.nanpercentile(overview_img, 2.5)
-        self.zoom_limit_max = np.nanpercentile(overview_img, 97.5)
+        self.zoom_limit_min = np.nanpercentile(overview_img, self.config.get("clip_percent"))
+        self.zoom_limit_max = np.nanpercentile(overview_img, 100 - self.config.get("clip_percent"))
         nan_mask = np.isnan(overview_img)
         overview_img[nan_mask] = 0
         overview_img = self.__tif_to_jpeg(overview_img, self.zoom_limit_min, self.zoom_limit_max)

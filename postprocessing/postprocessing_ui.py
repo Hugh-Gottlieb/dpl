@@ -24,7 +24,7 @@ class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
             MainWindow.setObjectName(u"MainWindow")
-        MainWindow.resize(520, 278)
+        MainWindow.resize(620, 346)
         self.central_widget = QWidget(MainWindow)
         self.central_widget.setObjectName(u"central_widget")
         self.gridLayout_2 = QGridLayout(self.central_widget)
@@ -34,22 +34,28 @@ class Ui_MainWindow(object):
         self.grid_layout.setVerticalSpacing(6)
         self.clear_button = QPushButton(self.central_widget)
         self.clear_button.setObjectName(u"clear_button")
+        font = QFont()
+        font.setPointSize(12)
+        self.clear_button.setFont(font)
 
         self.grid_layout.addWidget(self.clear_button, 2, 2, 1, 1)
 
         self.process_button = QPushButton(self.central_widget)
         self.process_button.setObjectName(u"process_button")
+        self.process_button.setFont(font)
 
         self.grid_layout.addWidget(self.process_button, 2, 0, 1, 1)
 
         self.select_button = QPushButton(self.central_widget)
         self.select_button.setObjectName(u"select_button")
+        self.select_button.setFont(font)
 
         self.grid_layout.addWidget(self.select_button, 0, 0, 1, 1)
 
         self.log = QPlainTextEdit(self.central_widget)
         self.log.setObjectName(u"log")
-        self.log.setMinimumSize(QSize(500, 0))
+        self.log.setMinimumSize(QSize(600, 0))
+        self.log.setFont(font)
         self.log.setReadOnly(True)
 
         self.grid_layout.addWidget(self.log, 4, 0, 1, 3)
@@ -64,14 +70,17 @@ class Ui_MainWindow(object):
         __qtablewidgetitem2 = QTableWidgetItem()
         self.acquisition_table.setHorizontalHeaderItem(2, __qtablewidgetitem2)
         self.acquisition_table.setObjectName(u"acquisition_table")
+        self.acquisition_table.setFont(font)
         self.acquisition_table.setSizeAdjustPolicy(QAbstractScrollArea.AdjustIgnored)
         self.acquisition_table.setAlternatingRowColors(False)
+        self.acquisition_table.setShowGrid(True)
+        self.acquisition_table.setSortingEnabled(False)
         self.acquisition_table.horizontalHeader().setVisible(True)
         self.acquisition_table.horizontalHeader().setCascadingSectionResizes(False)
         self.acquisition_table.horizontalHeader().setMinimumSectionSize(10)
         self.acquisition_table.horizontalHeader().setDefaultSectionSize(150)
         self.acquisition_table.horizontalHeader().setHighlightSections(False)
-        self.acquisition_table.horizontalHeader().setProperty("showSortIndicator", True)
+        self.acquisition_table.horizontalHeader().setProperty("showSortIndicator", False)
         self.acquisition_table.horizontalHeader().setStretchLastSection(True)
         self.acquisition_table.verticalHeader().setVisible(False)
         self.acquisition_table.verticalHeader().setStretchLastSection(False)
@@ -85,28 +94,33 @@ class Ui_MainWindow(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.author_text.sizePolicy().hasHeightForWidth())
         self.author_text.setSizePolicy(sizePolicy)
+        self.author_text.setFont(font)
 
         self.grid_layout.addWidget(self.author_text, 5, 0, 1, 3)
 
         self.mission_path = QLineEdit(self.central_widget)
         self.mission_path.setObjectName(u"mission_path")
+        self.mission_path.setFont(font)
         self.mission_path.setReadOnly(True)
 
         self.grid_layout.addWidget(self.mission_path, 0, 1, 1, 2)
 
         self.lens_label = QLabel(self.central_widget)
         self.lens_label.setObjectName(u"lens_label")
+        self.lens_label.setFont(font)
         self.lens_label.setAlignment(Qt.AlignCenter)
 
         self.grid_layout.addWidget(self.lens_label, 1, 0, 1, 1)
 
         self.lens_selection = QComboBox(self.central_widget)
         self.lens_selection.setObjectName(u"lens_selection")
+        self.lens_selection.setFont(font)
 
         self.grid_layout.addWidget(self.lens_selection, 1, 1, 1, 2)
 
         self.stop_button = QPushButton(self.central_widget)
         self.stop_button.setObjectName(u"stop_button")
+        self.stop_button.setFont(font)
 
         self.grid_layout.addWidget(self.stop_button, 2, 1, 1, 1)
 
