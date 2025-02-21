@@ -43,7 +43,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Init variables
         self.config = Config(get_config_path(__file__))
         self.lens_correction = LensCorrection()
-        self.registration = Registration()
+        self.registration = Registration(feature_limit=2500)
         self.transition_detector = TransitionDetector()
         self.state_detector = StateDetector(self.config)
         self.mission = None
