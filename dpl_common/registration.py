@@ -5,8 +5,8 @@ from dpl_common.helpers import Image
 
 class Registration:
 
-    def __init__(self):
-        self.feature_detector = cv2.SIFT_create()
+    def __init__(self, feature_limit:int = 5000):
+        self.feature_detector = cv2.SIFT_create(nfeatures=feature_limit)
         self.matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_L1)
 
     def register_image(self, image: Image, target: Image):
