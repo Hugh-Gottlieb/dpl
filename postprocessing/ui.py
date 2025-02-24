@@ -135,6 +135,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         start_time = time.time()
         try:
             images = acq.get_imgs(load_data=True)
+            assert (len(images) > 0), "No image data available"
             transitions = acq.get_transitions()
             if len(transitions) == 0:
                 transitions = self.transition_detector.detect_transitions(images)

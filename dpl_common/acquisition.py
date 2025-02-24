@@ -20,12 +20,14 @@ class Acquisition:
 
     def __read_metadata(self):
         metadata_path = os.path.join(self.root_dir, self.name, self.name + "_metadata.json")
-        assert (os.path.exists(metadata_path)), f"Metadata file missing: {metadata_path}"
-        with open(metadata_path) as f:
-            metadata = json.load(f)
+        if os.path.exists(metadata_path):
+            with open(metadata_path) as f:
+                metadata = json.load(f)
+        else:
+            metadata = {"images": [], "transitions": []}
         self.gps = GpsInfo(**metadata["gps"]) if "gps" in metadata else None
         self.gimbal = GimbalInfo(**metadata["gimbal"]) if "gimbal" in metadata else None
-        self.camera = CameraInfo(**metadata["camera"])
+        self.camera = CameraInfo(**metadata["camera"]) if "camera" in metadata else None
         self.imgs = []
         for img in metadata["images"]:
             self.imgs.append(Image(
