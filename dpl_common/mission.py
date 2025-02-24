@@ -17,6 +17,7 @@ class Mission:
             if folder == analysed_folder_name or folder.startswith("__") or not os.path.isdir(os.path.join(root_folder, folder)):
                 continue
             self.acquisitions.append(Acquisition(folder, root_folder))
+        self.acquisitions.sort(key=lambda x:x.get_name())
 
     def get_acquisitions(self) -> list[Acquisition]:
         return self.acquisitions

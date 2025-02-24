@@ -15,6 +15,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
+        self.showMaximized() # Fullscreen
         self.config = Config(get_config_path(__file__))
         self.mission = None
         self.display_scene = QGraphicsScene(self)
@@ -40,8 +41,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if n_actual != n_expected:
             self.status.setText(f"Error: Mission has {n_actual} images, but layout requires {n_expected}")
             return
-        self.showMaximized() # Fullscreen
-        QApplication.processEvents() # Force that update, so image displayed at correct resolution
         overview = self.__build_overview()
         self.__display_img(overview)
         self.status.setText(f"Showing overview")
