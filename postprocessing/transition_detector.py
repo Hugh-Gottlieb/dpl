@@ -4,4 +4,4 @@ from dpl_common.helpers import Image, Transition
 
 class TransitionDetector:
     def detect_transitions(self, images: list[Image]) -> list[Transition]:
-        raise NotImplementedError("detect_transition has not implemented")
+        raise NotImplementedError("detect_transition has not been implemented")
