@@ -142,6 +142,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             assert (len(transitions) == 1), "Multiple transitions cannot be handled yet"
             self.state_detector.tag_states(images, transitions)
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
+            transition_img.pl_state = Image.PL_State.UNKNOWN
             relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
             self.lens_correction.correct_images(relevant_imgs, self.lens_selection.currentText())
             self.lens_correction.correct_image(transition_img, self.lens_selection.currentText())
