@@ -76,7 +76,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not folder_path:
             return
         self.mission_path.setText(folder_path)
-        self.mission = Mission(folder_path)
+        try:
+            self.mission = Mission(folder_path)
+        except Exception as e:
+            print(traceback.format_exc())
+            self.log.appendPlainText(f"Failed to load mission {folder_path}: {e}")
+            return
         self.acquisition_table.setRowCount(0)
         for acq in self.mission.get_acquisitions():
             row = self.acquisition_table.rowCount()
