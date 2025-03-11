@@ -83,10 +83,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     @staticmethod
     def __read_single_overview_img(root, files, postfix):
-        file = [file for file in files if file.endswith("_" + postfix + ".tif")]
+        file = [file for file in files if file.endswith("_" + postfix + ".jpg")]
         if len(file) == 1:
             path = os.path.join(root, file[0])
-            return np.array(PIL_Image.open(path), dtype=np.uint16)
+            return np.array(PIL_Image.open(path), dtype=np.uint8)[:, :, ::-1]
         return None
 
     def __build_single_overview(self) -> np.ndarray:
@@ -105,8 +105,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return None
         img_width = pl_data.shape[1] if pl_data is not None else ir_data.shape[1]
         space_data = np.ones((10, img_width, 3), dtype=np.uint8) * 255
-        pl_data = self.__tif_to_jpeg(pl_data, self.zoom_limit_min, self.zoom_limit_max) if pl_data is not None else space_data
-        ir_data = tif_to_jpeg(ir_data) if ir_data is not None else space_data
+        pl_data = pl_data if pl_data is not None else space_data
+        ir_data = ir_data if ir_data is not None else space_data
         overview_single = np.concatenate((ir_data, space_data, pl_data), axis=0)
         return overview_single
 
