@@ -4,11 +4,19 @@ from PySide6.QtCore import Qt
 import sys
 import numpy as np
 import cv2
+from PIL import Image as PIL_Image
+import os
 
 from dpl_common.config import Config, get_config_path
 from dpl_common.mission import Mission
+from dpl_common.helpers import tif_to_jpeg
 
 from visualisation.visualisation_ui import Ui_MainWindow
+
+### NOTE!!!!
+# The single overview is experimental code, which is not fully integrated into the dpl_common Mission.
+# If the feature is kept, and integrated into dpl_common, this code MUST be updated.
+# Otherwise, you are violating the wishes of Gerold and Hugh. You've been warned ...
 
 class MainWindow(QMainWindow, Ui_MainWindow):
 
@@ -18,9 +26,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.showMaximized() # Fullscreen
         self.config = Config(get_config_path(__file__))
         self.mission = None
-        self.overview = None
         self.overview_scene = QGraphicsScene(self)
-        self.display_overview.setScene(self.overview_scene)
+        self.overview.setScene(self.overview_scene)
         self.display_scene = QGraphicsScene(self)
         self.display.setScene(self.display_scene)
         self.zoom_limit_min, self.zoom_limit_max = None, None
@@ -30,7 +37,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         placeholder = self.findChild(QWidget, "placeholderwidget")
         splitter = QSplitter(Qt.Horizontal)
 
-        splitter.addWidget(self.display_overview)
+        splitter.addWidget(self.overview)
         splitter.addWidget(self.display)
         splitter.setSizes([300, 700])
 
@@ -38,7 +45,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         layout = placeholder.layout()
         layout.addWidget(splitter)
 
-        self.display_overview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.overview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def set_mission(self):
@@ -64,27 +71,50 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         overview_grid = self.__build_overview()
         self.__display_img(overview_grid, scene=self.display_scene, view=self.display)
         self.status.setText(f"Showing grid overview")
-
         self.show_single_overview()
 
-    # TODO implement show_single_overview
     def show_single_overview(self) -> None:
-        if self.overview is None:
-            self.status.setText("Info: No overview images found.")
-            return
         overview_single = self.__build_single_overview()
-        self.__display_img(overview_single, self.display_overview, self.overview_scene)
-        self.status.setText(f"Showing overview")
+        if overview_single is not None:
+            self.__display_img(overview_single, scene=self.overview_scene, view=self.overview)
+            self.status.setText(f"Showing overview")
+        else:
+            self.overview_scene.clear()
 
-    # TODO implement __build_single_overview
+    @staticmethod
+    def __read_single_overview_img(root, files, postfix):
+        file = [file for file in files if file.endswith("_" + postfix + ".tif")]
+        if len(file) == 1:
+            path = os.path.join(root, file[0])
+            return np.array(PIL_Image.open(path), dtype=np.uint16)
+        return None
+
     def __build_single_overview(self) -> np.ndarray:
-        pass
+        if self.zoom_limit_min is None:
+            self.status.setText(f"Error: please display an grid overview before showing a single overview")
+            return None
+        root = os.path.join(self.mission.get_folder(), "overview")
+        if not os.path.exists(root):
+            self.status.setText("Error: No overview folder found.")
+            return None
+        files = os.listdir(root)
+        ir_data = self.__read_single_overview_img(root, files, "ir")
+        pl_data = self.__read_single_overview_img(root, files, "pl")
+        if pl_data is None and ir_data is None:
+            self.status.setText("Error: No overview images found.")
+            return None
+        img_width = pl_data.shape[1] if pl_data is not None else ir_data.shape[1]
+        space_data = np.ones((10, img_width, 3), dtype=np.uint8) * 255
+        pl_data = self.__tif_to_jpeg(pl_data, self.zoom_limit_min, self.zoom_limit_max) if pl_data is not None else space_data
+        ir_data = tif_to_jpeg(ir_data) if ir_data is not None else space_data
+        overview_single = np.concatenate((ir_data, space_data, pl_data), axis=0)
+        return overview_single
 
     def toggle_overview(self) -> None:
-        if self.display_overview.isVisible():
-            self.display_overview.hide()
+        if self.overview.isVisible():
+            self.overview.hide()
         else:
-            self.display_overview.show()
+            self.overview.show()
 
     # TODO rename this function to __build_grid_overview
     def __build_overview(self):

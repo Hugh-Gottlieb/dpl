@@ -65,10 +65,10 @@ class Ui_MainWindow(object):
         self.placeholderwidget.setSizePolicy(sizePolicy)
         self.horizontalLayout_2 = QHBoxLayout(self.placeholderwidget)
         self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
-        self.display_overview = QGraphicsView(self.placeholderwidget)
-        self.display_overview.setObjectName(u"display_overview")
+        self.overview = QGraphicsView(self.placeholderwidget)
+        self.overview.setObjectName(u"display_overview")
 
-        self.horizontalLayout_2.addWidget(self.display_overview)
+        self.horizontalLayout_2.addWidget(self.overview)
 
         self.display = QGraphicsView(self.placeholderwidget)
         self.display.setObjectName(u"display")
