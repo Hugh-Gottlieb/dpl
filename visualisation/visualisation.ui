@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>474</width>
-    <height>506</height>
+    <width>625</width>
+    <height>582</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,23 +15,91 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="layoutDirection">
-    <enum>Qt::LeftToRight</enum>
+    <enum>Qt::LayoutDirection::LeftToRight</enum>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,1">
-      <item row="5" column="0">
-       <widget class="QPushButton" name="show_overview_button">
+    <item row="1" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QPushButton" name="show_grid_button">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Show Grid</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="show_cell_button">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Zoom Cell</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="show_overview_button">
+          <property name="font">
+           <font>
+            <pointsize>12</pointsize>
+           </font>
+          </property>
+          <property name="text">
+           <string>Toggle Overview</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QWidget" name="placeholderwidget" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <widget class="QGraphicsView" name="display_overview"/>
+         </item>
+         <item>
+          <widget class="QGraphicsView" name="display"/>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="author_text">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="font">
          <font>
           <pointsize>12</pointsize>
          </font>
         </property>
         <property name="text">
-         <string>Show Overview</string>
+         <string>Developed by Hugh Gottlieb, with support from Gerold Kloos</string>
         </property>
        </widget>
       </item>
+     </layout>
+    </item>
+    <item row="0" column="0">
+     <layout class="QGridLayout" name="gridLayout_2" columnstretch="0,1">
       <item row="3" column="0">
        <widget class="QLabel" name="zoom_label">
         <property name="font">
@@ -40,19 +108,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Zoom</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="1">
-       <widget class="QPushButton" name="show_cell_button">
-        <property name="font">
-         <font>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Show Zoom</string>
+         <string>Zoom cell #</string>
         </property>
        </widget>
       </item>
@@ -64,7 +120,7 @@
          </font>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
        </widget>
       </item>
@@ -80,18 +136,6 @@
         </property>
        </widget>
       </item>
-      <item row="8" column="0" colspan="2">
-       <widget class="QLabel" name="author_text">
-        <property name="font">
-         <font>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string>Developed by Hugh Gottlieb, with support from Gerold Kloos</string>
-        </property>
-       </widget>
-      </item>
       <item row="2" column="1">
        <widget class="QSpinBox" name="cols">
         <property name="font">
@@ -100,7 +144,7 @@
          </font>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
         <property name="minimum">
          <number>1</number>
@@ -137,9 +181,6 @@
         </property>
        </widget>
       </item>
-      <item row="7" column="0" colspan="2">
-       <widget class="QGraphicsView" name="display"/>
-      </item>
       <item row="1" column="1">
        <widget class="QSpinBox" name="rows">
         <property name="font">
@@ -148,10 +189,10 @@
          </font>
         </property>
         <property name="layoutDirection">
-         <enum>Qt::LeftToRight</enum>
+         <enum>Qt::LayoutDirection::LeftToRight</enum>
         </property>
         <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
         </property>
         <property name="minimum">
          <number>1</number>
@@ -184,6 +225,12 @@
       </item>
       <item row="4" column="0">
        <widget class="QLabel" name="status_label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="font">
          <font>
           <pointsize>12</pointsize>
@@ -218,14 +265,14 @@
    </hints>
   </connection>
   <connection>
-   <sender>show_overview_button</sender>
+   <sender>show_grid_button</sender>
    <signal>clicked()</signal>
    <receiver>MainWindow</receiver>
    <slot>show_overview()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>62</x>
-     <y>132</y>
+     <x>73</x>
+     <y>202</y>
     </hint>
     <hint type="destinationlabel">
      <x>6</x>
@@ -240,12 +287,28 @@
    <slot>show_cell()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>404</x>
-     <y>135</y>
+     <x>410</x>
+     <y>202</y>
     </hint>
     <hint type="destinationlabel">
      <x>471</x>
      <y>143</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>show_overview_button</sender>
+   <signal>clicked()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>toggle_overview()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>560</x>
+     <y>192</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>617</x>
+     <y>211</y>
     </hint>
    </hints>
   </connection>
@@ -254,5 +317,6 @@
   <slot>set_mission()</slot>
   <slot>show_overview()</slot>
   <slot>show_cell()</slot>
+  <slot>toggle_overview()</slot>
  </slots>
 </ui>

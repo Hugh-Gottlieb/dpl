@@ -1,5 +1,5 @@
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QFileDialog, QGraphicsPixmapItem
+from PySide6.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QFileDialog, QGraphicsPixmapItem, QSplitter, QWidget, QSizePolicy
 from PySide6.QtCore import Qt
 import sys
 import numpy as np
@@ -18,9 +18,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.showMaximized() # Fullscreen
         self.config = Config(get_config_path(__file__))
         self.mission = None
+        self.overview = None
+        self.overview_scene = QGraphicsScene(self)
+        self.display_overview.setScene(self.overview_scene)
         self.display_scene = QGraphicsScene(self)
         self.display.setScene(self.display_scene)
         self.zoom_limit_min, self.zoom_limit_max = None, None
+        self.__build_splitter()
+
+    def __build_splitter(self) -> None:
+        placeholder = self.findChild(QWidget, "placeholderwidget")
+        splitter = QSplitter(Qt.Horizontal)
+
+        splitter.addWidget(self.display_overview)
+        splitter.addWidget(self.display)
+        splitter.setSizes([300, 700])
+
+        # Replace placeholder's layout with the splitter
+        layout = placeholder.layout()
+        layout.addWidget(splitter)
+
+        self.display_overview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def set_mission(self):
         options = QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontUseNativeDialog
@@ -32,6 +51,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.status.setText(f"Loaded mission - {len(self.mission.get_acquisitions())} images")
         self.zoom_limit_min, self.zoom_limit_max = None, None # Reset to None so dont use from previous mission
 
+    # TODO rename this function to show_grid_overview
     def show_overview(self):
         if self.mission is None:
             self.status.setText("Error: No mission selected")
@@ -41,10 +61,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if n_actual != n_expected:
             self.status.setText(f"Error: Mission has {n_actual} images, but layout requires {n_expected}")
             return
-        overview = self.__build_overview()
-        self.__display_img(overview)
+        overview_grid = self.__build_overview()
+        self.__display_img(overview_grid, scene=self.display_scene, view=self.display)
+        self.status.setText(f"Showing grid overview")
+
+        self.show_single_overview()
+
+    # TODO implement show_single_overview
+    def show_single_overview(self) -> None:
+        if self.overview is None:
+            self.status.setText("Info: No overview images found.")
+            return
+        overview_single = self.__build_single_overview()
+        self.__display_img(overview_single, self.display_overview, self.overview_scene)
         self.status.setText(f"Showing overview")
 
+    # TODO implement __build_single_overview
+    def __build_single_overview(self) -> np.ndarray:
+        pass
+
+    def toggle_overview(self) -> None:
+        if self.display_overview.isVisible():
+            self.display_overview.hide()
+        else:
+            self.display_overview.show()
+
+    # TODO rename this function to __build_grid_overview
     def __build_overview(self):
         space = 10
         y_size, x_size, = self.mission.get_acquisitions()[0].get_pl_image().data.shape
@@ -99,20 +141,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.status.setText(f"Error: please display an overview before zooming")
             return
         acq = self.mission.get_acquisitions()[zoom_id]
-        self.__display_img(self.__tif_to_jpeg(acq.get_pl_image().data, self.zoom_limit_min, self.zoom_limit_max))
+        self.__display_img(self.__tif_to_jpeg(acq.get_pl_image().data, self.zoom_limit_min, self.zoom_limit_max), scene=self.display_scene, view=self.display)
         self.status.setText(f"Showing zoom of {acq.get_name()}")
 
-    def __display_img(self, img):
+    @staticmethod
+    def __display_img(img, scene, view):
         height, width, depth = img.shape
         assert (depth == 3)
         bytes_per_line = depth * width
         q_image = QImage(img, width, height, bytes_per_line, QImage.Format_BGR888)
         pixmap_item = QGraphicsPixmapItem(QPixmap.fromImage(q_image))
         pixmap_item.setPos(0, 0)
-        self.display_scene.setSceneRect(0, 0, width, height)
-        self.display_scene.clear()
-        self.display_scene.addItem(pixmap_item)
-        self.display.fitInView(self.display_scene.sceneRect(), Qt.KeepAspectRatio)
+        scene.setSceneRect(0, 0, width, height)
+        scene.clear()
+        scene.addItem(pixmap_item)
+        view.fitInView(scene.sceneRect(), Qt.KeepAspectRatio)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
