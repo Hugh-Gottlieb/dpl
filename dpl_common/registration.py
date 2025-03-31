@@ -22,10 +22,12 @@ class Registration:
     # NOTE: currently recalculate the target keypoints / descriptors for every image, could speed up by reusing
     # NOTE: input is typically a uint16, but return a float64 which nan's at the border
     def register_img(self, img: np.ndarray, target: np.ndarray) -> np.ndarray:
-        baseline = np.min(target)
-        ratio = (np.max(target) - baseline) / 255
-        target_norm = ((target - baseline) / ratio).astype(np.uint8)
-        img_norm = np.clip(((img - baseline) / ratio), 0, 255).astype(np.uint8)
+        target_median = cv2.medianBlur(target, 5)
+        img_median = cv2.medianBlur(img, 5)
+        baseline = np.min(target_median)
+        ratio = (np.max(target_median) - baseline) / 255
+        target_norm = ((target_median - baseline) / ratio).astype(np.uint8)
+        img_norm = np.clip(((img_median - baseline) / ratio), 0, 255).astype(np.uint8)
         keypoints1, descriptors1 = self.feature_detector.detectAndCompute(target_norm, None)
         keypoints2, descriptors2 = self.feature_detector.detectAndCompute(img_norm, None)
         matches = list(self.matcher.match(descriptors1, descriptors2, None))

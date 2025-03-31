@@ -22,6 +22,10 @@ from postprocessing.postprocessing_ui import Ui_MainWindow
 from postprocessing.state_detector import StateDetector
 from postprocessing.transition_detector import TransitionDetector
 
+# TODO: try different registration strategies
+#   - bright and dark in sets, then each average together?
+#   - to adjacent, and propogate the transform matrix along?
+
 class MainWindow(QMainWindow, Ui_MainWindow):
 
     @dataclass
