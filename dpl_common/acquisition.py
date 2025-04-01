@@ -24,23 +24,27 @@ class Acquisition:
             with open(metadata_path) as f:
                 metadata = json.load(f)
         else:
-            metadata = {"images": [], "transitions": []}
+            metadata = {}
         self.gps = GpsInfo(**metadata["gps"]) if "gps" in metadata else None
         self.gimbal = GimbalInfo(**metadata["gimbal"]) if "gimbal" in metadata else None
         self.camera = CameraInfo(**metadata["camera"]) if "camera" in metadata else None
         self.imgs = []
-        for img in metadata["images"]:
+        for img in (metadata["images"] if "images" in metadata else []):
+            # XXX - catch old metadata json with ms timestamps
+            if img["time"] > 1e11:
+                raise Exception("Image timestamp probably in milliseconds, please use dpl/scripts/update_metadata_ts.py (or call Gerold / Hugh) to fix this.")
+            # XXX - hopefully we can delete this soon?
             self.imgs.append(Image(
                 name=img["name"],
                 pl_state=Image.string_to_pl_state(img["pl_state"]),
-                time=(img["time"] * 1e-3),
+                time=(img["time"]),
                 data=None
             ))
         self.transitions = []
-        for transition in metadata["transitions"]:
+        for transition in (metadata["transitions"] if "transitions" in metadata else []):
             self.transitions.append(Transition(
                 direction=Transition.string_to_transition_direction(transition["direction"]),
-                time=(transition["time"] * 1e-3)
+                time=(transition["time"])
             ))
 
     def get_name(self):
