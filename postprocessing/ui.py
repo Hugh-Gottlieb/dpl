@@ -106,6 +106,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.lens_selection.currentText() not in self.lens_correction.get_lens_names():
             self.log.appendPlainText("Error: unknown lens selected")
             return
+        self.lens_correction.set_default_lens(self.lens_selection.currentText())
         self.running_processing = True
         self.__enable_buttons()
         self.thread_pool = ThreadPoolExecutor(max_workers=int(max(1, os.cpu_count()/2)))
@@ -154,8 +155,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
             transition_img.pl_state = Image.PL_State.UNKNOWN
             relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
-            self.lens_correction.correct_images(relevant_imgs, self.lens_selection.currentText())
-            self.lens_correction.correct_image(transition_img, self.lens_selection.currentText())
+            self.lens_correction.correct_images(relevant_imgs)
+            self.lens_correction.correct_image(transition_img)
             n_imgs = len(relevant_imgs)
             for i, img in enumerate(relevant_imgs):
                 if self.abort_processing:
