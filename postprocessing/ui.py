@@ -115,7 +115,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.acq_status[acq].status == self.AcquisitionStatus.Status.NO:
                 self.acq_status[acq].status = self.AcquisitionStatus.Status.QUEUED
                 self.processing_status[acq] = None
-                self.thread_pool.submit(self.__process_acq, acq)
+                self.__process_acq(acq)
+                # self.thread_pool.submit(self.__process_acq, acq)
         self.update_status_thread.start((1/10)*1e3) # 10Hz
         self.log.appendPlainText(f"Processing mission {self.mission.get_folder()} ({self.thread_pool._max_workers} threads)")
 
@@ -147,7 +148,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             assert (len(images) > 0), "No image data available"
             transitions = acq.get_transitions()
             if len(transitions) == 0:
-                transitions = self.transition_detector.detect_transitions(images)
+                transitions = self.transition_detector.detect_transitions(images, self.lens_selection.currentText())
             assert (len(transitions) == 1), "Multiple transitions cannot be handled yet"
             self.state_detector.tag_states(images, transitions)
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]

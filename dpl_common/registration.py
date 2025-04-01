@@ -12,8 +12,10 @@ class Registration:
     def register_image(self, image: Image, target: Image):
         image.data = self.register_img(image.data, target.data)
 
-    def register_images(self, images: list[Image], target: Image):
+    def register_images(self, images: list[Image], target: Image, skip_target=False):
         for image in images:
+            if skip_target and image == target:
+                continue
             image.data = self.register_img(image.data, target.data)
 
     def register_imgs(self, imgs: list[np.ndarray], target: np.ndarray) -> list[np.ndarray]:
