@@ -21,7 +21,11 @@ def generate_metadata(path, name):
             continue
         key, val = line.split(",")
         if started_files:
-            metadata["images"].append({"name": key.split("/")[-1][:-4], "time": float(val), "pl_state": "unknown"})
+            name = key.split("/")[-1][:-4]
+            name_without_number = "_".join(name.split("_")[:-1])
+            name_number = int(name.split("_")[-1])
+            name = f"{name_without_number}_{name_number:03}"
+            metadata["images"].append({"name": name, "time": float(val), "pl_state": "unknown"})
         elif key == "exposure":
             metadata["camera"]["exposure_time"] = float(val)
         elif key == "fps":
