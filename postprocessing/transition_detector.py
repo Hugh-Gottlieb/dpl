@@ -1,10 +1,13 @@
+import matplotlib.patches
 from dpl_common.helpers import Image, Transition, tif_to_jpeg
 from dpl_common.registration import Registration
 from dpl_common.lens_correction import LensCorrection
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import cv2
 from scipy.signal import savgol_filter
+from itertools import groupby
 
 class TransitionDetector:
     def __init__(self):
@@ -62,7 +65,7 @@ class TransitionDetector:
     # TODO - cleanup variable passed in
     def detect_transitions(self, images: list[Image], lens_name: str, acq_name: str) -> list[Transition]:
 
-        images = images[:15] + images[-15:] # + images[15:30] # TODO - kill!!!!
+        # images = images[:15] + images[-15:] # + images[15:30] # TODO - kill!!!!
 
         # XXX Config params
         dark_offset = 0
@@ -81,8 +84,7 @@ class TransitionDetector:
         # Use a number of equally spaced pairings, in case multiple switches
         middle_index = round(len(images)/2)
         if switch_pairs < 1 or switch_pairs > len(images):
-            print(f"Invalid switch_pairs config: {switch_pairs} not in range [1, {len(images)}]")
-            return # TODO - error properly
+            raise Exception(f"Invalid switch_pairs config: {switch_pairs} not in range [1, {len(images)}]")
         switch_indexes = np.linspace(0, len(images)-1, switch_pairs+1).astype(int)
         middle_image = images[middle_index]
         completed_registrations = 0
@@ -98,8 +100,7 @@ class TransitionDetector:
             if self.__check_switched(diff_img):
                 diff_imgs.append(diff_img)
         if not diff_imgs:
-            print("No switches detected") # TODO - error properly
-            return
+            raise Exception("No switches detected")
         diff_img = np.mean(diff_imgs, axis=0)
         switch_mask = self.__get_switched_mask(diff_img)
         background_mask = self.__get_background_mask(diff_img)
@@ -120,22 +121,43 @@ class TransitionDetector:
         pl_signal = switched_signal * background_ratio
 
         # Detect transitions
-        savgol_size_percent = 0.8
+        savgol_size_percent = 0.25
         while True:
-            savgol_size = round(savgol_size_percent * len(pl_signal))
-            d_savgol = savgol_filter(pl_signal, savgol_size, 1, 1)
-            # TODO - detect switches
-
-            worked = True # TODO - fix this!
-            if worked:
-                break
             savgol_size_percent *= 0.8
-
-        # TODO: detect switching point / plateau area's based on 0-derivative?
-        #   - Normalise (around 0) -> decide if 0 or plateau or unknown. Transition is 0 -> local min (if HIGH_TO_LOW) -> 0
-        #   - Or use the straight lines somehow else, derivative very sensitive. Smoothed derivative (over more points than just 2, rather than convolve to smooth)
-        # TODO: detect IF high-to-low or low-to-high (prev algo existed?)
-
+            savgol_size = round(savgol_size_percent * len(pl_signal))
+            dsavgol = savgol_filter(pl_signal, savgol_size, 1, 1)
+            norm_dsavgol = dsavgol / np.abs(dsavgol).max()
+            abs_norm_dsavgol = np.abs(norm_dsavgol)
+            if abs_norm_dsavgol.min() > 0.1: # If never got down to 0, then too savgol coarse
+                continue
+            index = 0
+            plateaus, transitions = [], [] # start, stop, direction
+            for is_plateau, vals in groupby(abs_norm_dsavgol < 0.2):
+                start = index
+                index += len(list(vals))
+                stop = index
+                if is_plateau:
+                    if not transitions:
+                        plateau_state = Image.PL_State.UNKNOWN
+                    else:
+                        plateau_state = Image.PL_State.HIGH if transitions[-1][-1] == Transition.Direction.LOW_TO_HIGH else Image.PL_State.LOW
+                    plateaus.append([start, stop, plateau_state])
+                else:
+                    positive_gradient = np.average(norm_dsavgol[start:stop]) > 0
+                    transition_dir = Transition.Direction.LOW_TO_HIGH if positive_gradient else Transition.Direction.HIGH_TO_LOW
+                    if transitions:
+                        # TODO - this is biting me: what if there are 2 humps but one is super small and just noise?
+                        #      - ignore very small transitions?
+                        #      - or dont trust the last plateau? But need to still have 2 plateaus!
+                        #      - so actually asign all the pl states later, and merge adjacent?
+                        # assert(transition_dir != transitions[-1][-1]), "Transitions must go in alternating directions"
+                        pass
+                    elif plateaus: # Tag state of previous plateau
+                        plateaus[-1][-1] = Image.PL_State.LOW if transition_dir == Transition.Direction.LOW_TO_HIGH else Image.PL_State.HIGH
+                    transitions.append([start, stop, transition_dir])
+            if len(plateaus) < 2: # If dominated by transitions, and cant get 2 plateaus, try more sensitive
+                continue
+            break
         completion_percent = f"{len(images)} / {len(images)}"
         print(completion_percent) # TODO - omit completion
 
@@ -169,11 +191,18 @@ class TransitionDetector:
         plt.plot(ids, self.__normalise_signal(pl_signal), label="pl", linewidth=1)
         savgol = savgol_filter(pl_signal, savgol_size, 1)
         plt.plot(ids, self.__normalise_signal(savgol), label=f"savgol", linewidth=3)
+        for start, stop, pl_state in plateaus:
+            colour = "#5E99DB44" if pl_state == Image.PL_State.LOW else "#B7B22944"
+            plt.gca().add_patch(matplotlib.patches.Rectangle((start,0),stop-start-1,1,color=colour))
         plt.legend()
         plt.subplot(2,3,6)
         plt.title("Transition detection")
-        plt.plot(ids, d_savgol, label=f"d_savgol", linewidth=1)
+        plt.plot(ids, norm_dsavgol, label=f"d_savgol", linewidth=1)
+        for start, stop, pl_state in plateaus:
+            colour = "#5E99DB44" if pl_state == Image.PL_State.LOW else "#B7B22944"
+            plt.gca().add_patch(matplotlib.patches.Rectangle((start,-1),stop-start-1,1,color=colour))
+        plt.ylim(-1.1,1.1)
         plt.legend()
         plt.tight_layout()
         plt.savefig(f"{acq_name}_switch-debug.png") # TODO - save in debug folder of output dir
-        plt.show()
+        # plt.show() # TODO - remove
