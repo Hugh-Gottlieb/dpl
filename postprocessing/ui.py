@@ -26,6 +26,8 @@ from postprocessing.transition_detector import TransitionDetector
 #   - bright and dark in sets, then each average together?
 #   - to adjacent, and propogate the transform matrix along?
 
+# TODO: add debug flag to config, which saves registered images and state detection info
+
 class MainWindow(QMainWindow, Ui_MainWindow):
 
     @dataclass
@@ -149,7 +151,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             assert (len(images) > 0), "No image data available"
             transitions = acq.get_transitions()
             if len(transitions) == 0:
-                transitions = self.transition_detector.detect_transitions(images, self.lens_selection.currentText())
+                transitions = self.transition_detector.detect_transitions(images, self.lens_selection.currentText(), acq.get_name()) # TODO - cleanup
             assert (len(transitions) == 1), "Multiple transitions cannot be handled yet"
             self.state_detector.tag_states(images, transitions)
             transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
