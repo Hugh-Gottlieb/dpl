@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import cv2
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, argrelextrema
 from itertools import groupby
 
 class TransitionDetector:
@@ -48,6 +48,7 @@ class TransitionDetector:
         background_mask = background_mask.astype(bool)
         return background_mask
 
+    # TODO - for the GAF tests, maybe this should be more sensitive? Depends on zoom level probably? Misses some
     def __check_switched(self, diff_img):
         # XXX Config
         outlier_percentile, signal_percentile = 5, 10
@@ -85,9 +86,6 @@ class TransitionDetector:
         direction = Transition.Direction.HIGH_TO_LOW if positive_sum > negative_sum else Transition.Direction.LOW_TO_HIGH
         return direction
 
-    # XXXXXXXXXXXXX
-    # TODO - detect switch direction
-    # XXXXXXXXXXXXX
     def __get_diff_image(self, first_img:np.ndarray, second_img:np.ndarray) -> tuple[np.ndarray, Transition.Direction]:
         direction = self.__get_switch_direction(first_img, second_img)
         diff_img = (first_img - second_img) if direction == Transition.Direction.HIGH_TO_LOW else (second_img - first_img)
@@ -95,12 +93,9 @@ class TransitionDetector:
 
     # TODO - cleanup variable passed in
     def detect_transitions(self, images: list[Image], lens_name: str, acq_name: str) -> list[Transition]:
-
-        # images = images[:15] + images[-15:] # + images[15:30] # TODO - kill!!!!
-
         # XXX Config params
         dark_offset = 0
-        max_transitions = 5
+        max_transitions = 4
         # XXX Config
 
         # TODO - get (and config) as params
@@ -132,8 +127,9 @@ class TransitionDetector:
             if self.__check_switched(diff_img):
                 diff_imgs.append(diff_img)
                 diff_img_directions.append(direction)
+            elif diff_img_directions: # If had switched before and no longer switched, then switched back
+                diff_img_directions.append(Transition.Direction.HIGH_TO_LOW if diff_img_directions[0] == Transition.Direction.LOW_TO_HIGH else Transition.Direction.LOW_TO_HIGH)
         expected_transitions = [key for key, _ in groupby(diff_img_directions)]
-        print(expected_transitions) # TODO - remove
         if not diff_imgs:
             raise Exception("No switches detected")
         diff_img = np.mean(diff_imgs, axis=0)
@@ -156,48 +152,90 @@ class TransitionDetector:
         pl_signal = switched_signal * background_ratio
 
         # Detect transitions
-        savgol_size_percent = 0.25
-        while True:
-            savgol_size_percent *= 0.8
+        # XXX - fair warning, this gets a bit finnicky!!!
+        # NOTE - if the first image is during a transition, things could get weird when considering the expected transitions
+        # NOTE - if expected BIG high-to-low but get small high-to-low, small low-to-high, THEN the big high-to-low, we have a problem ...
+        savgol_size_percent = 0.25 # TODO - change with number of transitions detected?
+        expected_high_to_low = np.sum([1 for dir in expected_transitions if dir == Transition.Direction.HIGH_TO_LOW])
+        expected_low_to_high = len(expected_transitions) - expected_high_to_low
+        success = False
+        for _ in range(10):
+            # Calculate savgol
+            savgol_size_percent *= 0.8 # NOTE - constant: try more sensitive savgol
             savgol_size = round(savgol_size_percent * len(pl_signal))
-            dsavgol = savgol_filter(pl_signal, savgol_size, 1, 1)
+            dsavgol = savgol_filter(pl_signal, savgol_size, 1, 1) # Fit 1st-order polynomials, 1 derivative
             norm_dsavgol = dsavgol / np.abs(dsavgol).max()
             abs_norm_dsavgol = np.abs(norm_dsavgol)
-            if abs_norm_dsavgol.min() > 0.1: # If never got down to 0, then too savgol coarse
+            if abs_norm_dsavgol.min() > 0.1: # NOTE - constant: if never got down to 0, then too savgol coarse
+                print(f"{acq_name} savgol: no flat regions detected, reducing window size")
                 continue
+            # Get all transition options
+            high_to_low_options = [(index, Transition.Direction.HIGH_TO_LOW) for index in argrelextrema(norm_dsavgol, np.less, mode="clip")[0] if norm_dsavgol[index] < -0.5]
+            low_to_high_options = [(index, Transition.Direction.LOW_TO_HIGH) for index in argrelextrema(norm_dsavgol, np.greater, mode="clip")[0] if norm_dsavgol[index] > 0.5]
+            if len(high_to_low_options) < expected_high_to_low or len(low_to_high_options) < expected_low_to_high: # If dont get enough transitions, try more sensitive
+                print(f"{acq_name} savgol: insufficient transitions detected, reducing window size")
+                continue
+            transition_options = sorted(high_to_low_options + low_to_high_options, key=lambda x:x[0])
+            # Match transitions to expectations
+            transitions = []
+            error = False
+            for expected_transition_dir in expected_transitions:
+                option_indices = []
+                while transition_options:
+                    option_index, option_dir = transition_options[0]
+                    if option_dir != expected_transition_dir:
+                        break
+                    option_indices.append(option_index)
+                    transition_options.pop(0)
+                print(expected_transition_dir, option_indices)
+                if not option_indices: # Error: get to more sensitive savgol
+                    error = True
+                    print(f"{acq_name} savgol: cannot match expected transitions, reducing window size")
+                    break
+                option_vals = [abs_norm_dsavgol[index] for index in option_indices]
+                best_option_index = option_indices[np.argmax(option_vals)]
+                transitions.append((best_option_index, expected_transition_dir))
+            if error: # Error occured, try more sensitive
+                continue
+            # NOTE/TODO - this occuring is my nightmare ... most urgent to fix for GAF!
+            if transition_options:
+                print(f"{acq_name} savgol: fulfilled all expected transitions, without considering all options ... try increasing starting savgol size?")
+                print(transitions, transition_options)
+                # continue # TODO - bring this back?
+            # Get window around transitions
             index = 0
-            plateaus, transitions = [], [] # start, stop, direction
-            for is_plateau, vals in groupby(abs_norm_dsavgol < 0.2):
+            transition_windows = [] # start, stop, transtion.direction
+            for is_plateau, vals in groupby(abs_norm_dsavgol < 0.2): # NOTE - constant: below what threshold considered plateau
                 start = index
                 index += len(list(vals))
                 stop = index
-                if is_plateau:
+                if not is_plateau and transitions[0][0] >= start and transitions[0][0] < stop:
+                    transition_windows.append([start, stop, transitions[0][1]])
+                    transitions.pop(0)
                     if not transitions:
-                        plateau_state = Image.PL_State.UNKNOWN
-                    else:
-                        plateau_state = Image.PL_State.HIGH if transitions[-1][-1] == Transition.Direction.LOW_TO_HIGH else Image.PL_State.LOW
-                    plateaus.append([start, stop, plateau_state])
-                else:
-                    positive_gradient = np.average(norm_dsavgol[start:stop]) > 0
-                    transition_dir = Transition.Direction.LOW_TO_HIGH if positive_gradient else Transition.Direction.HIGH_TO_LOW
-                    if transitions:
-                        # TODO - this is biting me: what if there are 2 humps but one is super small and just noise?
-                        #      - ignore very small transitions?
-                        #      - or dont trust the last plateau? But need to still have 2 plateaus!
-                        #      - so actually asign all the pl states later, and merge adjacent?
-                        # assert(transition_dir != transitions[-1][-1]), "Transitions must go in alternating directions"
-                        pass
-                    elif plateaus: # Tag state of previous plateau
-                        plateaus[-1][-1] = Image.PL_State.LOW if transition_dir == Transition.Direction.LOW_TO_HIGH else Image.PL_State.HIGH
-                    transitions.append([start, stop, transition_dir])
-            if len(plateaus) < 2: # If dominated by transitions, and cant get 2 plateaus, try more sensitive
-                continue
+                        break
+            assert (not transitions), "Something went wrong, all transitions should have been assigned their respective windows"
+            # Create windows around plateaus
+            plateau_windows = [] # start, stop, image.pl_state
+            prev_stop = 0
+            for start, stop, direction in transition_windows:
+                if start != 0:
+                    state = Image.PL_State.HIGH if direction == Transition.Direction.HIGH_TO_LOW else Image.PL_State.LOW
+                    plateau_windows.append([prev_stop, start, state])
+                prev_stop = stop
+            if prev_stop != len(images):
+                state = Image.PL_State.LOW if transition_windows[-1][-1] == Transition.Direction.HIGH_TO_LOW else Image.PL_State.HIGH
+                plateau_windows.append([prev_stop, len(images), state])
+            success = True
             break
+        assert(success), "Failed to find expected transitions, aborting"
         completion_percent = f"{len(images)} / {len(images)}"
         print(completion_percent) # TODO - omit completion
 
         # Plot
         # TODO - hide behind debug flag
+        # TODO - still create when error occurs above (most imporant time!!)
+        # TODO - work better from background thread?
         plt.figure(figsize=(19,9))
         plt.subplot(2,3,1)
         plt.title("Rough PL image")
@@ -226,18 +264,18 @@ class TransitionDetector:
         plt.plot(ids, self.__normalise_signal(pl_signal), label="pl", linewidth=1)
         savgol = savgol_filter(pl_signal, savgol_size, 1)
         plt.plot(ids, self.__normalise_signal(savgol), label=f"savgol", linewidth=3)
-        for start, stop, pl_state in plateaus:
+        for start, stop, pl_state in plateau_windows:
             colour = "#5E99DB44" if pl_state == Image.PL_State.LOW else "#B7B22944"
             plt.gca().add_patch(matplotlib.patches.Rectangle((start,0),stop-start-1,1,color=colour))
         plt.legend()
         plt.subplot(2,3,6)
         plt.title("Transition detection")
         plt.plot(ids, norm_dsavgol, label=f"d_savgol", linewidth=1)
-        for start, stop, pl_state in plateaus:
+        for start, stop, pl_state in plateau_windows:
             colour = "#5E99DB44" if pl_state == Image.PL_State.LOW else "#B7B22944"
-            plt.gca().add_patch(matplotlib.patches.Rectangle((start,-1),stop-start-1,1,color=colour))
+            plt.gca().add_patch(matplotlib.patches.Rectangle((start,-1),stop-start-1,2,color=colour))
         plt.ylim(-1.1,1.1)
         plt.legend()
         plt.tight_layout()
         plt.savefig(f"{acq_name}_switch-debug.png") # TODO - save in debug folder of output dir
-        plt.show() # TODO - remove
+        # plt.show() # TODO - remove
