@@ -24,8 +24,9 @@ class TransitionDetector:
 
     def __get_switched_mask(self, diff_img):
         # XXX Config
-        switch_percentile_low, switch_percentile_high = 85, 95
+        outlier_percentile, signal_percentile = 5, 10
         # XXX Config
+        switch_percentile_low, switch_percentile_high = 100 - outlier_percentile - signal_percentile, 100 - outlier_percentile
         switch_diff_img = diff_img * self.gaussian_kernel # Devalue outside edges
         switch_low, switch_high = np.nanpercentile(switch_diff_img, switch_percentile_low), np.nanpercentile(switch_diff_img, switch_percentile_high)
         switch_mask = np.logical_and(switch_diff_img >= switch_low, switch_diff_img <= switch_high).astype(np.uint8)
@@ -38,8 +39,9 @@ class TransitionDetector:
 
     def __get_background_mask(self, diff_img):
         # XXX Config
-        background_percentile_low, background_percentile_high = 5, 15
+        outlier_percentile, signal_percentile = 5, 10
         # XXX Config
+        background_percentile_low, background_percentile_high = outlier_percentile, outlier_percentile + signal_percentile
         background_diff_img = diff_img / self.gaussian_kernel # Raise value of outside edges so not picked
         background_low, background_high = np.nanpercentile(background_diff_img, background_percentile_low), np.nanpercentile(background_diff_img, background_percentile_high)
         background_mask = np.logical_and(background_diff_img >= background_low, background_diff_img <= background_high).astype(np.uint8)
@@ -48,19 +50,48 @@ class TransitionDetector:
 
     def __check_switched(self, diff_img):
         # XXX Config
-        switch_percentile_low, switch_percentile_high = 85, 95
+        outlier_percentile, signal_percentile = 5, 10
         # XXX Config
         switch_mask = self.__get_switched_mask(diff_img)
-        remaining_area = (np.count_nonzero(switch_mask)/switch_mask.size)/((switch_percentile_high - switch_percentile_low)/100)
-        return remaining_area > 0.35
+        remaining_area = (np.count_nonzero(switch_mask)/switch_mask.size)/(signal_percentile/100)
+        return remaining_area > 0.5
+
+    def __get_switch_direction(self, first_img:np.ndarray, second_img:np.ndarray) -> Transition.Direction:
+        # XXX Config
+        outlier_percentile, signal_percentile = 5, 10
+        # XXX Config
+        # Clip extremes, to remove outliers
+        diff_img = first_img - second_img
+        diff_img = np.clip(diff_img, np.nanpercentile(diff_img, outlier_percentile), np.nanpercentile(diff_img, 100 - outlier_percentile))
+        # Blur on HUGE scale, to cancel out ground noise
+        # - cant median blur as float32 max kernel size is 5
+        # - cv2.blur turns the whole things to nan if any present, so temporarily disable (restore for valid percentiles)
+        nan_mask = np.isnan(diff_img)
+        diff_img[nan_mask] = 0
+        diff_img = cv2.blur(diff_img, (51,51))
+        diff_img[nan_mask] = np.nan
+        # Treat lowest changing as noise, try to shift average to np.nan
+        abs_img = np.abs(diff_img)
+        noise_cutoff = np.nanpercentile(abs_img, outlier_percentile + signal_percentile)
+        noise = np.nanmean(diff_img[np.logical_and(diff_img >= -noise_cutoff, diff_img <= noise_cutoff)])
+        diff_img = diff_img - noise
+        # Devalue outskirts of images, focus on panels at center
+        diff_img = diff_img * self.gaussian_kernel
+        # Calculate square sum (accounts for size and strength of signal) to find which one is clearer signal
+        positive_cutoff = np.nanpercentile(diff_img, 100 - outlier_percentile - signal_percentile)
+        negative_cutoff = np.nanpercentile(diff_img, outlier_percentile + signal_percentile)
+        positive_sum = np.sum(np.square(diff_img[diff_img >= positive_cutoff]))
+        negative_sum = np.sum(np.square(diff_img[diff_img <= negative_cutoff]))
+        direction = Transition.Direction.HIGH_TO_LOW if positive_sum > negative_sum else Transition.Direction.LOW_TO_HIGH
+        return direction
 
     # XXXXXXXXXXXXX
     # TODO - detect switch direction
     # XXXXXXXXXXXXX
-    def __get_diff_image(self, first_img, second_img):
-        direction = Transition.Direction.LOW_TO_HIGH
+    def __get_diff_image(self, first_img:np.ndarray, second_img:np.ndarray) -> tuple[np.ndarray, Transition.Direction]:
+        direction = self.__get_switch_direction(first_img, second_img)
         diff_img = (first_img - second_img) if direction == Transition.Direction.HIGH_TO_LOW else (second_img - first_img)
-        return diff_img
+        return diff_img, direction
 
     # TODO - cleanup variable passed in
     def detect_transitions(self, images: list[Image], lens_name: str, acq_name: str) -> list[Transition]:
@@ -69,7 +100,7 @@ class TransitionDetector:
 
         # XXX Config params
         dark_offset = 0
-        switch_pairs = 5
+        max_transitions = 5
         # XXX Config
 
         # TODO - get (and config) as params
@@ -83,9 +114,9 @@ class TransitionDetector:
         # Check if switched, get signal / background masks
         # Use a number of equally spaced pairings, in case multiple switches
         middle_index = round(len(images)/2)
-        if switch_pairs < 1 or switch_pairs > len(images):
-            raise Exception(f"Invalid switch_pairs config: {switch_pairs} not in range [1, {len(images)}]")
-        switch_indexes = np.linspace(0, len(images)-1, switch_pairs+1).astype(int)
+        if max_transitions < 1 or max_transitions > len(images):
+            raise Exception(f"Invalid switch_pairs config: {max_transitions} not in range [1, {len(images)}]")
+        switch_indexes = np.linspace(0, len(images)-1, max_transitions+1).astype(int)
         middle_image = images[middle_index]
         completed_registrations = 0
         for i, index in enumerate(switch_indexes):
@@ -95,10 +126,14 @@ class TransitionDetector:
             completion_percent = f"{completed_registrations} / {len(images)}"
             print(completion_percent) # TODO - omit completion
         diff_imgs = []
+        diff_img_directions = []
         for index in switch_indexes[1:]:
-            diff_img = self.__get_diff_image(images[0].data, images[index].data)
+            diff_img, direction = self.__get_diff_image(images[0].data, images[index].data)
             if self.__check_switched(diff_img):
                 diff_imgs.append(diff_img)
+                diff_img_directions.append(direction)
+        expected_transitions = [key for key, _ in groupby(diff_img_directions)]
+        print(expected_transitions) # TODO - remove
         if not diff_imgs:
             raise Exception("No switches detected")
         diff_img = np.mean(diff_imgs, axis=0)
@@ -205,4 +240,4 @@ class TransitionDetector:
         plt.legend()
         plt.tight_layout()
         plt.savefig(f"{acq_name}_switch-debug.png") # TODO - save in debug folder of output dir
-        # plt.show() # TODO - remove
+        plt.show() # TODO - remove
