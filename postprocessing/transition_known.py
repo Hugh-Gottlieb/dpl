@@ -1,5 +1,8 @@
 import numpy as np
 from typing import Callable
+import shutil
+import os
+from PIL import Image as PIL_Image
 
 from dpl_common.helpers import Image, Transition
 from dpl_common.config import Config
@@ -30,7 +33,14 @@ class TransitionKnown:
         self.lens_correction.correct_images(relevant_images)
         for i, image in enumerate(relevant_images):
             abort = register_function(image, transition_image, f"{i} / {len(relevant_images)}")
-            if debug_path is not None:
-                # TODO - save registered image to debug path (+- folder names ...)
-                analysed_path, acq_name = debug_path
             if abort: return
+        if debug_path is not None:
+            analysed_path, acq_name = debug_path
+            registered_root = os.path.join(analysed_path, "debug", acq_name + "_registered")
+            if os.path.exists(registered_root):
+                shutil.rmtree(registered_root)
+            os.makedirs(registered_root)
+            relevant_images_ids = [i for i, image in enumerate(images) if image.pl_state != Image.PL_State.UNKNOWN]
+            for id, image in zip(relevant_images_ids, relevant_images):
+                pil_image = PIL_Image.fromarray(image.data)
+                pil_image.save(os.path.join(registered_root, f"{acq_name}_{id:03}.tif"))

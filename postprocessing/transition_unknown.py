@@ -4,6 +4,9 @@ import numpy as np
 import cv2
 from scipy.signal import savgol_filter, argrelextrema
 from itertools import groupby
+import os
+import shutil
+from PIL import Image as PIL_Image
 import time
 import matplotlib.pyplot as plt
 import matplotlib
@@ -33,7 +36,7 @@ class TransitionUnknown:
             analysed_path, acq_name = debug_path
             debug_name = f"{analysed_path.split('/')[-2]}:{acq_name}"
 
-        # Check if switched, get signal / background masks (use a number of equally spaced pairings to detect multiple switches)
+        # Register evenly distributed subset of images (rough estimation of switching)
         self.lens_correction.correct_images(images)
         middle_index = round(len(images)/2)
         if max_transitions < 1 or max_transitions > int(len(images)/2)-1:
@@ -46,6 +49,10 @@ class TransitionUnknown:
             if index != middle_index:
                 abort = register_function(images[index], middle_image, f"{completed_registrations} / {len(images)}")
                 if abort: return
+        if middle_index not in switch_indexes:
+            completed_registrations += 1
+
+        # Find switches and module/background mask
         diff_imgs = []
         diff_img_directions = []
         for index in switch_indexes[1:]:
@@ -70,8 +77,13 @@ class TransitionUnknown:
             abort = register_function(image, middle_image, f"{completed_registrations} / {len(images)}")
             if abort: return
         if debug:
-            pass
-            # TODO - save registered images to debug folder
+            registered_root = os.path.join(analysed_path, "debug", acq_name + "_registered")
+            if os.path.exists(registered_root):
+                shutil.rmtree(registered_root)
+            os.makedirs(registered_root)
+            for id, image in enumerate(images):
+                pil_image = PIL_Image.fromarray(image.data)
+                pil_image.save(os.path.join(registered_root, f"{acq_name}_{id:03}.tif"))
 
         # Get PL signal, correcting for changes in background illumination
         # TODO - background signal just seems to be making things worse??? @Oliver. Also check those that go bad - what happens? Does that area reflect all? Esp when concentrated!
@@ -84,6 +96,7 @@ class TransitionUnknown:
         # NOTE - fair warning, this gets a bit finnicky!!!
         # NOTE - if the first image is during a transition, things could get weird when considering the expected transitions
         # NOTE - if get small noisy transitions can screw up expected ordering and get things out of sync ...
+        # NOTE - could replace percent with a constant time window?
         savgol_size_percent = (0.2 / max_transitions) / 0.8 # Divide by 0.8 to pre-empt initial decrease
         expected_high_to_low = np.sum([1 for dir in expected_transitions if dir == Transition.Direction.HIGH_TO_LOW])
         expected_low_to_high = len(expected_transitions) - expected_high_to_low
@@ -165,8 +178,7 @@ class TransitionUnknown:
                 image.pl_state = pl_state
 
         # Plot
-        # TODO - still create when error occurs above (most imporant time!!)
-        # TODO - save image in debug folder of output dir
+        # TODO - still create when error occurs above (most imporant time!!) - make into function that called before early return?
         if debug:
             plt.figure(figsize=(19,9), layout="constrained")
             plt.subplot(2,3,1)
@@ -208,7 +220,7 @@ class TransitionUnknown:
                 plt.gca().add_patch(matplotlib.patches.Rectangle((start,-1),stop-start-1,2,color=colour))
             plt.ylim(-1.1,1.1)
             plt.legend()
-            plt.savefig(f"{acq_name}_switch-debug.png", format="png")
+            plt.savefig(os.path.join(analysed_path, "debug", f"{acq_name}_switch-debug.png"), format="png")
             time.sleep(1)
 
     def __get_switched_mask(self, diff_img: np.ndarray) -> np.ndarray:
