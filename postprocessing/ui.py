@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass
 import time
 import traceback
-import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
@@ -25,8 +24,6 @@ from postprocessing.transition_unknown import TransitionUnknown
 # TODO: try different registration strategies
 #   - bright and dark in sets, then each average together?
 #   - to adjacent, and propogate the transform matrix along?
-
-# TODO: add debug flag to config, which saves registered images and state detection info
 
 class MainWindow(QMainWindow, Ui_MainWindow):
 

@@ -1,11 +1,13 @@
 import matplotlib.patches
 from typing import Callable
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
 import cv2
 from scipy.signal import savgol_filter, argrelextrema
 from itertools import groupby
+import time
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("agg") # Non-interactive backend so not a problem from background threads
 
 from dpl_common.helpers import Image, Transition, tif_to_jpeg
 from dpl_common.config import Config
@@ -67,9 +69,12 @@ class TransitionUnknown:
             completed_registrations += 1
             abort = register_function(image, middle_image, f"{completed_registrations} / {len(images)}")
             if abort: return
+        if debug:
+            pass
+            # TODO - save registered images to debug folder
 
         # Get PL signal, correcting for changes in background illumination
-        # TODO - background signal just seems to be making things worse??? @Oliver. Also check those that go bad - what happens?
+        # TODO - background signal just seems to be making things worse??? @Oliver. Also check those that go bad - what happens? Does that area reflect all? Esp when concentrated!
         background_signal = np.array([np.nanmean(img.data[background_mask]) for img in images]) - dark_offset
         switched_signal = np.array([np.nanmean(img.data[switch_mask]) for img in images]) - dark_offset
         background_ratio = np.average(background_signal) / background_signal
@@ -160,11 +165,10 @@ class TransitionUnknown:
                 image.pl_state = pl_state
 
         # Plot
-        # TODO - work better from background thread?
         # TODO - still create when error occurs above (most imporant time!!)
         # TODO - save image in debug folder of output dir
         if debug:
-            plt.figure(figsize=(19,9))
+            plt.figure(figsize=(19,9), layout="constrained")
             plt.subplot(2,3,1)
             plt.title("Rough PL image")
             diff_img[np.isnan(diff_img)] = 0
@@ -204,8 +208,8 @@ class TransitionUnknown:
                 plt.gca().add_patch(matplotlib.patches.Rectangle((start,-1),stop-start-1,2,color=colour))
             plt.ylim(-1.1,1.1)
             plt.legend()
-            plt.tight_layout()
-            plt.savefig(f"{acq_name}_switch-debug.png")
+            plt.savefig(f"{acq_name}_switch-debug.png", format="png")
+            time.sleep(1)
 
     def __get_switched_mask(self, diff_img: np.ndarray) -> np.ndarray:
         outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
