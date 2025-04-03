@@ -1,5 +1,10 @@
 {
     "transition_halftime_ms": 50,
     "plateau_time_ms": 500,
-    "lens": "Kowa_f12.5_Alvium_1800"
+    "lens": "Kowa_f25_SenS_inGaAs",
+    "outlier_percentile": 5,
+    "signal_percentile": 10,
+    "dark_offset": 0,
+    "max_transitions": 1,
+    "debug": true
 }

@@ -19,8 +19,8 @@ from dpl_common.lens_correction import LensCorrection
 from dpl_common.registration import Registration
 
 from postprocessing.postprocessing_ui import Ui_MainWindow
-from postprocessing.state_detector import StateDetector
-from postprocessing.transition_detector import TransitionDetector
+from postprocessing.transition_known import TransitionKnown
+from postprocessing.transition_unknown import TransitionUnknown
 
 # TODO: try different registration strategies
 #   - bright and dark in sets, then each average together?
@@ -50,8 +50,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.config = Config(get_config_path(__file__))
         self.lens_correction = LensCorrection()
         self.registration = Registration(feature_limit=2500)
-        self.transition_detector = TransitionDetector()
-        self.state_detector = StateDetector(self.config)
+        self.transition_unknown = TransitionUnknown(self.config, self.lens_correction)
+        self.transition_known = TransitionKnown(self.config, self.lens_correction)
         self.mission = None
         self.acq_status = {}
         self.processing_status = {}
@@ -118,8 +118,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.acq_status[acq].status == self.AcquisitionStatus.Status.NO:
                 self.acq_status[acq].status = self.AcquisitionStatus.Status.QUEUED
                 self.processing_status[acq] = None
-                self.__process_acq(acq)
-                # self.thread_pool.submit(self.__process_acq, acq)
+                self.thread_pool.submit(self.__process_acq, acq)
         self.update_status_thread.start((1/10)*1e3) # 10Hz
         self.log.appendPlainText(f"Processing mission {self.mission.get_folder()} ({self.thread_pool._max_workers} threads)")
 
@@ -149,28 +148,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             images = acq.get_imgs(load_data=True)
             assert (len(images) > 0), "No image data available"
-            transitions = acq.get_transitions()
-            if len(transitions) == 0:
-                transitions = self.transition_detector.detect_transitions(images, self.lens_selection.currentText(), acq.get_name()) # TODO - cleanup
-            assert (len(transitions) == 1), "Multiple transitions cannot be handled yet"
-            self.state_detector.tag_states(images, transitions)
-            transition_img = images[np.argmin(np.abs([(image.time - transitions[0].time) for image in images]))]
-            transition_img.pl_state = Image.PL_State.UNKNOWN
-            relevant_imgs = [image for image in images if image.pl_state != Image.PL_State.UNKNOWN]
-            self.lens_correction.correct_images(relevant_imgs)
-            self.lens_correction.correct_image(transition_img)
-            n_imgs = len(relevant_imgs)
-            for i, img in enumerate(relevant_imgs):
+            def __register_image(image: Image, target: Image, status: str) -> bool:
                 if self.abort_processing:
                     acq.clear_imgs() # Remove partially processed images so reloaded from file without lens correction etc.
-                    return
-                self.processing_status[acq] = f"{i} / {n_imgs}"
-                self.registration.register_image(img, transition_img)
-            acq.get_pl_image().create(relevant_imgs, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
+                    return True
+                self.registration.register_image(image, target)
+                self.processing_status[acq] = status
+                return False
+            debug_path = (self.mission.get_analysed_folder(), acq.get_name()) if self.config.get("debug") else None
+            if len(acq.get_transitions()) == 0:
+                self.transition_unknown.tag_and_register_images(images, __register_image, debug_path)
+            else:
+                self.transition_known.tag_and_register_images(images, acq.get_transitions(), __register_image, debug_path)
+            if self.abort_processing: return
+            acq.get_pl_image().create(images, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
             acq.get_pl_image().save(self.mission.get_analysed_folder())
             self.acq_status[acq].status = self.AcquisitionStatus.Status.YES
             with self.pending_msgs_lock:
-                self.pending_msgs.append(f"  Success: {acq.get_name()} ({round(time.time() - start_time, 3)}s) ({len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.HIGH])} HIGH, {len([1 for img in relevant_imgs if img.pl_state == Image.PL_State.LOW])} LOW)")
+                self.pending_msgs.append(f"  Success: {acq.get_name()} ({round(time.time() - start_time, 3)}s) ({len([1 for img in images if img.pl_state == Image.PL_State.HIGH])} HIGH, {len([1 for img in images if img.pl_state == Image.PL_State.LOW])} LOW)")
         except Exception as e:
             print(traceback.format_exc())
             self.acq_status[acq].status = self.AcquisitionStatus.Status.ERROR
