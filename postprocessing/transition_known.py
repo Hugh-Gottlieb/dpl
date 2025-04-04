@@ -13,7 +13,7 @@ class TransitionKnown:
         self.config = config
         self.lens_correction = lens_correction
 
-    def tag_and_register_images(self, images: list[Image], transitions: list[Transition], register_function: Callable[[Image, Image, str], bool], debug_path:str = None):
+    def tag_and_register_images(self, images: list[Image], transitions: list[Transition], register_function: Callable[[Image, Image, str], bool], output_path:str, acq_name: str):
         # Tag states
         assert (len(transitions) == 1), "StateDetector cannot handle multiple transitions yet"
         min_time = self.config.get("transition_halftime_ms")
@@ -34,9 +34,8 @@ class TransitionKnown:
         for i, image in enumerate(relevant_images):
             abort = register_function(image, transition_image, f"{i} / {len(relevant_images)}")
             if abort: return
-        if debug_path is not None:
-            analysed_path, acq_name = debug_path
-            registered_root = os.path.join(analysed_path, "debug", acq_name + "_registered")
+        if self.config.get("debug_registration"):
+            registered_root = os.path.join(output_path, "debug", acq_name + "_registered")
             if os.path.exists(registered_root):
                 shutil.rmtree(registered_root)
             os.makedirs(registered_root)

@@ -16,6 +16,8 @@ from dpl_common.helpers import Image, Transition, tif_to_jpeg
 from dpl_common.config import Config
 from dpl_common.lens_correction import LensCorrection
 
+# TODO - time some of this stuff and speed it up!
+
 class TransitionUnknown:
     def __init__(self, config: Config, lens_correction: LensCorrection):
         self.config = config
@@ -28,13 +30,10 @@ class TransitionUnknown:
         kernel[kernel <= 0] = 1e-9 # Not PERFECTLY zero to prevent division problems
         self.gaussian_kernel = kernel
 
-    def tag_and_register_images(self, images: list[Image], register_function: Callable[[Image, Image, str], bool], debug_path:str = None):
+    def tag_and_register_images(self, images: list[Image], register_function: Callable[[Image, Image, str], bool], output_path:str, acq_name: str):
         dark_offset = self.config.get("dark_offset")
         max_transitions = self.config.get("max_transitions")
-        debug = debug_path is not None
-        if debug:
-            analysed_path, acq_name = debug_path
-            debug_name = f"{analysed_path.split('/')[-2]}:{acq_name}"
+        debug_name = f"{output_path.split('/')[-2]}:{acq_name}"
 
         # Register evenly distributed subset of images (rough estimation of switching)
         self.lens_correction.correct_images(images)
@@ -56,18 +55,39 @@ class TransitionUnknown:
         diff_imgs = []
         diff_img_directions = []
         for index in switch_indexes[1:]:
-            diff_img, direction = self.__get_diff_image(images[0].data, images[index].data)
-            if self.__check_switched(diff_img):
+            diff_img, direction, _ = self.__get_diff_image(images[0].data, images[index].data)
+            did_switch, _ = self.__check_switched(diff_img) # did_switch can be None = unsure
+            if did_switch:
                 diff_imgs.append(diff_img)
-                diff_img_directions.append(direction)
-            elif diff_img_directions: # If had switched before and no longer switched, then switched back
-                diff_img_directions.append(Transition.Direction.HIGH_TO_LOW if diff_img_directions[0] == Transition.Direction.LOW_TO_HIGH else Transition.Direction.LOW_TO_HIGH)
+                if direction != Transition.Direction.UNKNOWN:
+                    diff_img_directions.append(direction)
+            elif did_switch == False and diff_img_directions: # If had switched before and no longer switched, then switched back
+                diff_img_directions.append(Transition.Direction.HIGH_TO_LOW if diff_img_directions[-1] == Transition.Direction.LOW_TO_HIGH else Transition.Direction.LOW_TO_HIGH)
         expected_transitions = [key for key, _ in groupby(diff_img_directions)]
         if not diff_imgs:
             raise Exception("No switches detected")
         diff_img = np.mean(diff_imgs, axis=0)
         switch_mask = self.__get_switched_mask(diff_img)
         background_mask = self.__get_background_mask(diff_img)
+
+        # Create debug plot
+        if self.config.get("debug_switching"):
+            fig, axes = plt.subplots(2,len(switch_indexes)-1, figsize=(19,9), layout="constrained")
+            for i, index in enumerate(switch_indexes[1:]):
+                _diff_img, _direction, _dir_score = self.__get_diff_image(images[0].data, images[index].data)
+                _did_switch, _switched_score = self.__check_switched(_diff_img)
+                _switch_mask = self.__get_switched_mask(_diff_img)
+                _diff_img[np.isnan(_diff_img)] = 0
+                axes[0,i].imshow(tif_to_jpeg(_diff_img,5,True)[:,:,::-1]) # Flip channels so displayed correctly
+                axes[0,i].set_title(f"{_direction.name} ({round(_dir_score,3)})")
+                axes[1,i].imshow(_switch_mask)
+                axes[1,i].set_title(f"{_did_switch} ({round(_switched_score,3)})")
+            figure_dir = os.path.join(output_path, "debug")
+            if not os.path.exists(figure_dir): os.makedirs(figure_dir)
+            figure_path = os.path.join(figure_dir, f"{acq_name}_switching-detection.png")
+            if os.path.exists(figure_path): os.remove(figure_path)
+            fig.savefig(figure_path, format="png")
+            time.sleep(1)
 
         # Complete remaining registrations
         for i, image in enumerate(images):
@@ -76,8 +96,8 @@ class TransitionUnknown:
             completed_registrations += 1
             abort = register_function(image, middle_image, f"{completed_registrations} / {len(images)}")
             if abort: return
-        if debug:
-            registered_root = os.path.join(analysed_path, "debug", acq_name + "_registered")
+        if self.config.get("debug_registration"):
+            registered_root = os.path.join(output_path, "debug", acq_name + "_registered")
             if os.path.exists(registered_root):
                 shutil.rmtree(registered_root)
             os.makedirs(registered_root)
@@ -86,10 +106,11 @@ class TransitionUnknown:
                 pil_image.save(os.path.join(registered_root, f"{acq_name}_{id:03}.tif"))
 
         # Get PL signal, correcting for changes in background illumination
-        # TODO - background signal just seems to be making things worse??? @Oliver. Also check those that go bad - what happens? Does that area reflect all? Esp when concentrated!
+        # TODO - decide re background signal (just seems to be making things worse???) @Oliver ...
         background_signal = np.array([np.nanmean(img.data[background_mask]) for img in images]) - dark_offset
         switched_signal = np.array([np.nanmean(img.data[switch_mask]) for img in images]) - dark_offset
         background_ratio = np.average(background_signal) / background_signal
+        background_ratio = 1
         pl_signal = switched_signal * background_ratio
 
         # Detect transitions
@@ -109,13 +130,13 @@ class TransitionUnknown:
             norm_dsavgol = dsavgol / np.abs(dsavgol).max()
             abs_norm_dsavgol = np.abs(norm_dsavgol)
             if abs_norm_dsavgol.min() > 0.1: # NOTE - constant: if never got down to 0, then too savgol coarse
-                if debug: print(f"{debug_name} - savgol no flat regions detected, reducing window size")
+                if self.config.get("debug_switching"): print(f"{debug_name} - savgol no flat regions detected, reducing window size")
                 continue
             # Get all transition options
             high_to_low_options = [(index, Transition.Direction.HIGH_TO_LOW) for index in argrelextrema(norm_dsavgol, np.less, mode="clip")[0] if norm_dsavgol[index] < -0.5]
             low_to_high_options = [(index, Transition.Direction.LOW_TO_HIGH) for index in argrelextrema(norm_dsavgol, np.greater, mode="clip")[0] if norm_dsavgol[index] > 0.5]
             if len(high_to_low_options) < expected_high_to_low or len(low_to_high_options) < expected_low_to_high: # If dont get enough transitions, try more sensitive
-                if debug: print(f"{debug_name} savgol insufficient transitions detected, reducing window size")
+                if self.config.get("debug_switching"): print(f"{debug_name} savgol insufficient transitions detected, reducing window size")
                 continue
             transition_options = sorted(high_to_low_options + low_to_high_options, key=lambda x:x[0])
             # Match transitions to expectations
@@ -130,7 +151,7 @@ class TransitionUnknown:
                     option_indices.append(option_index)
                     transition_options.pop(0)
                 if not option_indices: # Error: try more sensitive savgol
-                    if debug: print(f"{debug_name} savgol cannot match expected transitions, reducing window size")
+                    if self.config.get("debug_switching"): print(f"{debug_name} savgol cannot match expected transitions, reducing window size")
                     error = True
                     break
                 option_vals = [abs_norm_dsavgol[index] for index in option_indices]
@@ -139,7 +160,7 @@ class TransitionUnknown:
             if error: continue # Error occured, try more sensitive
             # TODO - this occuring is my nightmare ... most urgent to fix for GAF!
             if transition_options:
-                if debug: print(f"{debug_name} savgol fulfilled all expected transitions, with remaining options ({transition_options})")
+                if self.config.get("debug_switching"): print(f"{debug_name} savgol fulfilled all expected transitions, with remaining options ({transition_options})")
             success = True
             break
         assert(success), "Failed to find expected transitions, aborting"
@@ -179,7 +200,7 @@ class TransitionUnknown:
 
         # Plot
         # TODO - still create when error occurs above (most imporant time!!) - make into function that called before early return?
-        if debug:
+        if self.config.get("debug_switching"):
             fig, axes = plt.subplots(2,3, figsize=(19,9), layout="constrained")
             axes[0][0].set_title("Rough PL image")
             diff_img[np.isnan(diff_img)] = 0
@@ -214,7 +235,9 @@ class TransitionUnknown:
                 axes[1][2].add_patch(matplotlib.patches.Rectangle((start,-1),stop-start-1,2,color=colour))
             axes[1][2].set_ylim(-1.1,1.1)
             axes[1][2].legend()
-            figure_path = os.path.join(analysed_path, "debug", f"{acq_name}_switch-debug.png")
+            figure_dir = os.path.join(output_path, "debug")
+            if not os.path.exists(figure_dir): os.makedirs(figure_dir)
+            figure_path = os.path.join(figure_dir, f"{acq_name}_state-detection.png")
             if os.path.exists(figure_path): os.remove(figure_path)
             fig.savefig(figure_path, format="png")
             time.sleep(1)
@@ -241,14 +264,16 @@ class TransitionUnknown:
         background_mask = background_mask.astype(bool)
         return background_mask
 
-    # TODO - test more!!! For the GAF tests, maybe this should be more sensitive? Depends on zoom level probably? Misses some
+    # TODO - GAF wtf? fails depending on zoom levels?
+    # TODO - make configurable values?
     def __check_switched(self, diff_img: np.ndarray) -> bool:
         signal_percentile = self.config.get("signal_percentile")
         switch_mask = self.__get_switched_mask(diff_img)
         remaining_area = (np.count_nonzero(switch_mask)/switch_mask.size)/(signal_percentile/100)
-        return remaining_area > 0.5
+        switched = True if remaining_area > 0.3 else False if remaining_area < 0.1 else None
+        return switched, remaining_area
 
-    # TODO - can this detect if it switched at all? Look at the positive_sum / negative_sum ratio (e.g. if < 5 then didn't switch? logical AND / OR with other?)
+    # NOTE: could possibly use the score from this to confirm if it switched (small vs large) but no reliable
     def __get_switch_direction(self, first_img:np.ndarray, second_img:np.ndarray) -> Transition.Direction:
         outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
         # Clip extremes, to remove outliers
@@ -273,12 +298,13 @@ class TransitionUnknown:
         positive_sum = np.sum(np.square(diff_img[diff_img >= positive_cutoff]))
         negative_sum = np.sum(np.square(diff_img[diff_img <= negative_cutoff]))
         direction = Transition.Direction.HIGH_TO_LOW if positive_sum > negative_sum else Transition.Direction.LOW_TO_HIGH
-        return direction
+        score = positive_sum / negative_sum if positive_sum > negative_sum else negative_sum / positive_sum
+        return direction, score
 
     def __get_diff_image(self, first_img:np.ndarray, second_img:np.ndarray) -> tuple[np.ndarray, Transition.Direction]:
-        direction = self.__get_switch_direction(first_img, second_img)
+        direction, score = self.__get_switch_direction(first_img, second_img)
         diff_img = (first_img - second_img) if direction == Transition.Direction.HIGH_TO_LOW else (second_img - first_img)
-        return diff_img, direction
+        return diff_img, direction, score
 
     def __normalise_signal(self, signal: np.ndarray) -> np.ndarray:
         return (signal - signal.min()) / (signal.max() - signal.min())

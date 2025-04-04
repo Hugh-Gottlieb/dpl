@@ -152,11 +152,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.registration.register_image(image, target)
                 self.processing_status[acq] = status
                 return False
-            debug_path = (self.mission.get_analysed_folder(), acq.get_name()) if self.config.get("debug") else None
             if len(acq.get_transitions()) == 0:
-                self.transition_unknown.tag_and_register_images(images, __register_image, debug_path)
+                self.transition_unknown.tag_and_register_images(images, __register_image, self.mission.get_analysed_folder(), acq.get_name())
             else:
-                self.transition_known.tag_and_register_images(images, acq.get_transitions(), __register_image, debug_path)
+                self.transition_known.tag_and_register_images(images, acq.get_transitions(), __register_image, self.mission.get_analysed_folder(), acq.get_name())
             if self.abort_processing: return
             acq.get_pl_image().create(images, self.config, acq.get_gps_info(), acq.get_gimbal_info(), acq.get_camera_info())
             acq.get_pl_image().save(self.mission.get_analysed_folder())

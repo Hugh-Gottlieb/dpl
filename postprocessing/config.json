@@ -5,6 +5,7 @@
     "outlier_percentile": 5,
     "signal_percentile": 10,
     "dark_offset": 0,
-    "max_transitions": 1,
-    "debug": true
+    "max_transitions": 3,
+    "debug_registration": false,
+    "debug_switching": true
 }
