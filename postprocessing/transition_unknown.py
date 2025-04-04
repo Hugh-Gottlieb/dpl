@@ -16,7 +16,7 @@ from dpl_common.helpers import Image, Transition, tif_to_jpeg
 from dpl_common.config import Config
 from dpl_common.lens_correction import LensCorrection
 
-# TODO - time some of this stuff and speed it up!
+# TODO - speed optimisation
 
 class TransitionUnknown:
     def __init__(self, config: Config, lens_correction: LensCorrection):
@@ -51,35 +51,49 @@ class TransitionUnknown:
         if middle_index not in switch_indexes:
             completed_registrations += 1
 
-        # Find switches and module/background mask
-        diff_imgs = []
-        diff_img_directions = []
+        # Find switch direction
+        # NOTE - always relate to first image, if this is during a transition then things could get weird?
+        diff_scores = {Transition.Direction.HIGH_TO_LOW: [], Transition.Direction.LOW_TO_HIGH: []}
+        diff_thresholds = {Transition.Direction.HIGH_TO_LOW: [], Transition.Direction.LOW_TO_HIGH: []}
         for index in switch_indexes[1:]:
-            diff_img, direction, _ = self.__get_diff_image(images[0].data, images[index].data)
-            did_switch, _ = self.__check_switched(diff_img) # did_switch can be None = unsure
-            if did_switch:
+            direction = self.__get_switch_direction(images[0].data, images[index].data)
+            diff_img = self.__get_diff_image(images[0].data, images[index].data, direction)
+            did_switch, switch_score = self.__check_if_switched(diff_img)
+            if not did_switch: continue
+            diff_threshold = (switch_score**2) * np.nanpercentile(diff_img, 100-self.config.get("outlier_percentile"))
+            diff_scores[direction].append((switch_score**2) * diff_threshold)
+            diff_thresholds[direction].append(diff_threshold)
+        # TODO - could exit early HERE if nothing switched (turn debug plot into function that called before exiting)
+        score1 = np.average(diff_scores[Transition.Direction.HIGH_TO_LOW]) if diff_scores[Transition.Direction.HIGH_TO_LOW] else 0
+        score2 = np.average(diff_scores[Transition.Direction.LOW_TO_HIGH]) if diff_scores[Transition.Direction.LOW_TO_HIGH] else 0
+        diff_direction = Transition.Direction.HIGH_TO_LOW if score1 > score2 else Transition.Direction.LOW_TO_HIGH
+        diff_threshold = np.average(diff_thresholds[diff_direction]) if diff_thresholds[diff_direction] else 1
+        diff_switch_cutoff = diff_threshold * 0.2 # TODO - make this configurable?
+
+        # Get valid diff images, work out expected transitions
+        expected_transitions, diff_imgs = [], []
+        for index in switch_indexes[1:]:
+            diff_img = self.__get_diff_image(images[0].data, images[index].data, diff_direction)
+            did_switch, _ = self.__check_if_switched(diff_img, diff_switch_cutoff) # NOTE: constant, remove parts of image that really didn't switch
+            if did_switch == True:
                 diff_imgs.append(diff_img)
-                if direction != Transition.Direction.UNKNOWN:
-                    diff_img_directions.append(direction)
-            elif did_switch == False and diff_img_directions: # If had switched before and no longer switched, then switched back
-                diff_img_directions.append(Transition.Direction.HIGH_TO_LOW if diff_img_directions[-1] == Transition.Direction.LOW_TO_HIGH else Transition.Direction.LOW_TO_HIGH)
-        expected_transitions = [key for key, _ in groupby(diff_img_directions)]
-        if not diff_imgs:
-            raise Exception("No switches detected")
-        diff_img = np.mean(diff_imgs, axis=0)
-        switch_mask = self.__get_switched_mask(diff_img)
-        background_mask = self.__get_background_mask(diff_img)
+                expected_transitions.append(diff_direction)
+            elif did_switch == False and expected_transitions: # If had switched before and no longer switched, then switched back (opposite of first switch)
+                expected_transitions.append(Transition.Direction.HIGH_TO_LOW if diff_direction == Transition.Direction.LOW_TO_HIGH else Transition.Direction.LOW_TO_HIGH)
+        expected_transitions = [key for key, _ in groupby(expected_transitions)] # Remove consecutive duplicates
 
         # Create debug plot
         if self.config.get("debug_switching"):
             fig, axes = plt.subplots(2,len(switch_indexes)-1, figsize=(19,9), layout="constrained")
+            fig.suptitle([t.name for t in expected_transitions])
             for i, index in enumerate(switch_indexes[1:]):
-                _diff_img, _direction, _dir_score = self.__get_diff_image(images[0].data, images[index].data)
-                _did_switch, _switched_score = self.__check_switched(_diff_img)
-                _switch_mask = self.__get_switched_mask(_diff_img)
-                _diff_img[np.isnan(_diff_img)] = 0
-                axes[0,i].imshow(tif_to_jpeg(_diff_img,5,True)[:,:,::-1]) # Flip channels so displayed correctly
-                axes[0,i].set_title(f"{_direction.name} ({round(_dir_score,3)})")
+                _direction = self.__get_switch_direction(images[0].data, images[index].data)
+                _diff_img = self.__get_diff_image(images[0].data, images[index].data, diff_direction)
+                _did_switch, _switched_score = self.__check_if_switched(_diff_img, diff_switch_cutoff)
+                _switch_mask = self.__get_switched_mask(_diff_img, diff_switch_cutoff)
+                _diff_img = np.clip(np.nan_to_num(_diff_img), 0, diff_threshold) / diff_threshold # Nans to 0, normalise scaling
+                axes[0,i].imshow(tif_to_jpeg(_diff_img,0,True)[:,:,::-1]) # Flip channels so displayed correctly
+                axes[0,i].set_title(f"{_direction.name}")
                 axes[1,i].imshow(_switch_mask)
                 axes[1,i].set_title(f"{_did_switch} ({round(_switched_score,3)})")
             figure_dir = os.path.join(output_path, "debug")
@@ -88,6 +102,13 @@ class TransitionUnknown:
             if os.path.exists(figure_path): os.remove(figure_path)
             fig.savefig(figure_path, format="png")
             time.sleep(1)
+
+        # Get module vs background area
+        if not diff_imgs:
+            raise Exception("No switches detected")
+        diff_img = np.clip(np.mean(diff_imgs, axis=0), 0, None)
+        switch_mask = self.__get_switched_mask(diff_img)
+        background_mask = self.__get_background_mask(diff_img)
 
         # Complete remaining registrations
         for i, image in enumerate(images):
@@ -106,18 +127,14 @@ class TransitionUnknown:
                 pil_image.save(os.path.join(registered_root, f"{acq_name}_{id:03}.tif"))
 
         # Get PL signal, correcting for changes in background illumination
-        # TODO - decide re background signal (just seems to be making things worse???) @Oliver ...
         background_signal = np.array([np.nanmean(img.data[background_mask]) for img in images]) - dark_offset
         switched_signal = np.array([np.nanmean(img.data[switch_mask]) for img in images]) - dark_offset
         background_ratio = np.average(background_signal) / background_signal
-        background_ratio = 1
+        background_ratio = 1 # TODO - decide re background signal (just seems to be making things worse???) @Oliver ...
         pl_signal = switched_signal * background_ratio
 
         # Detect transitions
-        # NOTE - fair warning, this gets a bit finnicky!!!
-        # NOTE - if the first image is during a transition, things could get weird when considering the expected transitions
-        # NOTE - if get small noisy transitions can screw up expected ordering and get things out of sync ...
-        # NOTE - could replace percent with a constant time window?
+        # TODO - replace percent with a configurable time window?
         savgol_size_percent = (0.2 / max_transitions) / 0.8 # Divide by 0.8 to pre-empt initial decrease
         expected_high_to_low = np.sum([1 for dir in expected_transitions if dir == Transition.Direction.HIGH_TO_LOW])
         expected_low_to_high = len(expected_transitions) - expected_high_to_low
@@ -158,7 +175,11 @@ class TransitionUnknown:
                 best_option_index = option_indices[np.argmax(option_vals)]
                 transitions.append((best_option_index, expected_transition_dir))
             if error: continue # Error occured, try more sensitive
-            # TODO - this occuring is my nightmare ... most urgent to fix for GAF!
+            # TODO - update algo - work backwards from biggest (find max, remove that and all adjacent of same direction, repeat)
+            #                    - potentially some left at the end, but who cares
+            #                    - if doesn't line up somehow (ordering wrong?) then repeat with smaller savgol
+            #                    - also if have < 5 HIGH or LOW images?
+            #                    - put that in a function so easy to quit and restart at any time
             if transition_options:
                 if self.config.get("debug_switching"): print(f"{debug_name} savgol fulfilled all expected transitions, with remaining options ({transition_options})")
             success = True
@@ -242,45 +263,25 @@ class TransitionUnknown:
             fig.savefig(figure_path, format="png")
             time.sleep(1)
 
-    def __get_switched_mask(self, diff_img: np.ndarray) -> np.ndarray:
-        outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
-        switch_percentile_low, switch_percentile_high = 100 - outlier_percentile - signal_percentile, 100 - outlier_percentile
-        switch_diff_img = diff_img * self.gaussian_kernel # Devalue outside edges
-        switch_low, switch_high = np.nanpercentile(switch_diff_img, switch_percentile_low), np.nanpercentile(switch_diff_img, switch_percentile_high)
-        switch_mask = np.logical_and(switch_diff_img >= switch_low, switch_diff_img <= switch_high).astype(np.uint8)
-        switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT,(1,1)),iterations=2) # Remove small noise
-        switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT,(2,2)),iterations=1) # Close gaps
-        switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT,(2,2)),iterations=3) # Remove bigger noise
-        switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT,(1,1)),iterations=3) # Remove more small noise
-        switch_mask = switch_mask.astype(bool)
-        return switch_mask
+    def __get_diff_image(self, first_img:np.ndarray, second_img:np.ndarray, direction:Transition.Direction) -> np.ndarray:
+        diff_img = (first_img - second_img) if direction == Transition.Direction.HIGH_TO_LOW else (second_img - first_img)
+        return np.clip(diff_img, 0, None)
 
-    def __get_background_mask(self, diff_img: np.ndarray) -> np.ndarray:
-        outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
-        background_percentile_low, background_percentile_high = outlier_percentile, outlier_percentile + signal_percentile
-        background_diff_img = diff_img / self.gaussian_kernel # Raise value of outside edges so not picked
-        background_low, background_high = np.nanpercentile(background_diff_img, background_percentile_low), np.nanpercentile(background_diff_img, background_percentile_high)
-        background_mask = np.logical_and(background_diff_img >= background_low, background_diff_img <= background_high).astype(np.uint8)
-        background_mask = background_mask.astype(bool)
-        return background_mask
-
-    # TODO - GAF wtf? fails depending on zoom levels?
-    # TODO - make configurable values?
-    def __check_switched(self, diff_img: np.ndarray) -> bool:
+    # TODO - make this based on config params? Tune it? Lower vals now appropriate, since remove pixels those that didn't switch?
+    def __check_if_switched(self, diff_img: np.ndarray, threshold: float = 0) -> tuple[bool, float]:
         signal_percentile = self.config.get("signal_percentile")
-        switch_mask = self.__get_switched_mask(diff_img)
+        switch_mask = self.__get_switched_mask(diff_img, threshold)
         remaining_area = (np.count_nonzero(switch_mask)/switch_mask.size)/(signal_percentile/100)
         switched = True if remaining_area > 0.3 else False if remaining_area < 0.1 else None
         return switched, remaining_area
 
-    # NOTE: could possibly use the score from this to confirm if it switched (small vs large) but no reliable
     def __get_switch_direction(self, first_img:np.ndarray, second_img:np.ndarray) -> Transition.Direction:
         outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
-        # Clip extremes, to remove outliers
+        # Remove extremes (outliers)
         diff_img = first_img - second_img
-        diff_img = np.clip(diff_img, np.nanpercentile(diff_img, outlier_percentile), np.nanpercentile(diff_img, 100 - outlier_percentile))
+        outlier_low, outlier_high = np.nanpercentile(diff_img, outlier_percentile), np.nanpercentile(diff_img, 100 - outlier_percentile)
+        diff_img[np.logical_or(diff_img < outlier_low, diff_img > outlier_high)] = np.nan
         # Blur on HUGE scale, to cancel out ground noise
-        diff_img = cv2.medianBlur(diff_img.astype("float32"), 5) # Can only median blur float32 with kernal size <= 5
         nan_mask = np.isnan(diff_img)
         diff_img[nan_mask] = 0 # blur turns whole thing to nans if any present
         diff_img = cv2.blur(diff_img, (51,51))
@@ -293,18 +294,39 @@ class TransitionUnknown:
         # Devalue outskirts of images, focus on panels at center
         diff_img = diff_img * self.gaussian_kernel
         # Calculate square sum (accounts for size and strength of signal) to find which one is clearer signal
-        positive_cutoff = np.nanpercentile(diff_img, 100 - outlier_percentile - signal_percentile)
-        negative_cutoff = np.nanpercentile(diff_img, outlier_percentile + signal_percentile)
+        positive_cutoff = np.nanpercentile(diff_img, 100 - signal_percentile)
+        negative_cutoff = np.nanpercentile(diff_img, signal_percentile)
         positive_sum = np.sum(np.square(diff_img[diff_img >= positive_cutoff]))
         negative_sum = np.sum(np.square(diff_img[diff_img <= negative_cutoff]))
         direction = Transition.Direction.HIGH_TO_LOW if positive_sum > negative_sum else Transition.Direction.LOW_TO_HIGH
-        score = positive_sum / negative_sum if positive_sum > negative_sum else negative_sum / positive_sum
-        return direction, score
+        return direction
 
-    def __get_diff_image(self, first_img:np.ndarray, second_img:np.ndarray) -> tuple[np.ndarray, Transition.Direction]:
-        direction, score = self.__get_switch_direction(first_img, second_img)
-        diff_img = (first_img - second_img) if direction == Transition.Direction.HIGH_TO_LOW else (second_img - first_img)
-        return diff_img, direction, score
+    def __get_switched_mask(self, diff_img: np.ndarray, threshold: float = 0) -> np.ndarray:
+        size_factor = self.config.get("morphological_size_factor")
+        outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
+        switch_percentile_low, switch_percentile_high = 100 - outlier_percentile - signal_percentile, 100 - outlier_percentile
+        switch_diff_img = diff_img * self.gaussian_kernel # Devalue outside edges
+        switch_low, switch_high = np.nanpercentile(switch_diff_img, switch_percentile_low), np.nanpercentile(switch_diff_img, switch_percentile_high)
+        switch_mask = np.logical_and(switch_diff_img >= switch_low, np.logical_and(switch_diff_img <= switch_high, diff_img > threshold)).astype(np.uint8)
+        size1, size2 = round(size_factor), round(2 * size_factor)
+        if size1 >= 1:
+            switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT,(size1, size1)),iterations=2) # Remove small noise
+        if size2 >= 1:
+            switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT,(size2, size2)),iterations=1) # Close gaps
+            switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT,(size2, size2)),iterations=3) # Remove bigger noise
+        if size1 >= 1:
+            switch_mask = cv2.morphologyEx(switch_mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT,(size1, size1)),iterations=3) # Remove more small noise
+        switch_mask = switch_mask.astype(bool)
+        return switch_mask
+
+    def __get_background_mask(self, diff_img: np.ndarray) -> np.ndarray:
+        outlier_percentile, signal_percentile = self.config.get("outlier_percentile"), self.config.get("signal_percentile")
+        background_percentile_low, background_percentile_high = outlier_percentile, outlier_percentile + signal_percentile
+        background_diff_img = diff_img / self.gaussian_kernel # Raise value of outside edges so not picked
+        background_low, background_high = np.nanpercentile(background_diff_img, background_percentile_low), np.nanpercentile(background_diff_img, background_percentile_high)
+        background_mask = np.logical_and(background_diff_img >= background_low, background_diff_img <= background_high).astype(np.uint8)
+        background_mask = background_mask.astype(bool)
+        return background_mask
 
     def __normalise_signal(self, signal: np.ndarray) -> np.ndarray:
         return (signal - signal.min()) / (signal.max() - signal.min())
